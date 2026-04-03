@@ -8,7 +8,7 @@ A lightweight, browser-based **Bash terminal emulator** built with **HTML, CSS, 
 
 ## 🌐 Live Demo
 
-https://terminal.cipher
+https://terminal.ciphernet.org
 
 ---
 
