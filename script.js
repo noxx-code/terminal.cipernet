@@ -124,7 +124,95 @@ const Pkg=(()=>{const inst=new Set(['bash','coreutils','grep','sed','awk','tar',
 })();
 
 /* ====== MAN PAGES ====== */
-const Man={ls:'NAME\n    ls - list directory contents\nSYNOPSIS\n    ls [-la] [FILE]...\nOPTIONS\n    -a  show hidden files\n    -l  long listing format',cd:'NAME\n    cd - change directory\nSYNOPSIS\n    cd [dir]',grep:'NAME\n    grep - search for patterns\nSYNOPSIS\n    grep [-inrvc] PATTERN [FILE]...\nOPTIONS\n    -i ignore case  -n line numbers  -r recursive\n    -v invert  -c count',find:'NAME\n    find - search for files\nSYNOPSIS\n    find [path] [-name pattern] [-type f|d]',cat:'NAME\n    cat - concatenate files\nSYNOPSIS\n    cat [FILE]...',chmod:'NAME\n    chmod - change file mode\nSYNOPSIS\n    chmod MODE FILE',pwd:'NAME\n    pwd - print working directory',mkdir:'NAME\n    mkdir - make directories\nSYNOPSIS\n    mkdir [-p] DIR...',rm:'NAME\n    rm - remove files\nSYNOPSIS\n    rm [-rf] FILE...',cp:'NAME\n    cp - copy files\nSYNOPSIS\n    cp SOURCE DEST',mv:'NAME\n    mv - move files\nSYNOPSIS\n    mv SOURCE DEST',echo:'NAME\n    echo - display text\nSYNOPSIS\n    echo [-n] STRING...',touch:'NAME\n    touch - create file / update timestamp\nSYNOPSIS\n    touch FILE...',head:'NAME\n    head - output first lines\nSYNOPSIS\n    head [-n NUM] [FILE]...',tail:'NAME\n    tail - output last lines\nSYNOPSIS\n    tail [-n NUM] [-f] [FILE]...',wc:'NAME\n    wc - word/line/char count\nSYNOPSIS\n    wc [-lwc] [FILE]...',sort:'NAME\n    sort - sort lines\nSYNOPSIS\n    sort [-rnu] [FILE]...',uniq:'NAME\n    uniq - filter duplicates\nSYNOPSIS\n    uniq [-cd] [INPUT]',cut:'NAME\n    cut - select fields\nSYNOPSIS\n    cut -d DELIM -f LIST [FILE]...',sed:'NAME\n    sed - stream editor\nSYNOPSIS\n    sed \'s/OLD/NEW/[g]\' [FILE]',awk:'NAME\n    awk - pattern processing\nSYNOPSIS\n    awk [-F sep] \'{print $N}\' [FILE]...',ps:'NAME\n    ps - process status\nSYNOPSIS\n    ps [aux]',kill:'NAME\n    kill - signal process\nSYNOPSIS\n    kill [-9] PID',top:'NAME\n    top - process viewer\nSYNOPSIS\n    top',ping:'NAME\n    ping - test connectivity (simulated)\nSYNOPSIS\n    ping [-c N] HOST',tar:'NAME\n    tar - archive utility\nSYNOPSIS\n    tar [cxztf] ARCHIVE [FILES...]',apt:'NAME\n    apt - package manager\nSYNOPSIS\n    apt [update|install|remove] [PKG]',df:'NAME\n    df - disk space\nSYNOPSIS\n    df [-h]',du:'NAME\n    du - file space usage\nSYNOPSIS\n    du [-hs] [FILE]...',free:'NAME\n    free - memory usage\nSYNOPSIS\n    free [-h]',man:'NAME\n    man - manual pages\nSYNOPSIS\n    man COMMAND',chown:'NAME\n    chown - change owner\nSYNOPSIS\n    chown OWNER[:GROUP] FILE',less:'NAME\n    less - page viewer\nSYNOPSIS\n    less FILE',history:'NAME\n    history - show command history'};
+const Man={
+  ls:{section:'1',name:'ls',summary:'list directory contents',synopsis:'ls [OPTION]... [FILE]...',description:'List files and directories in the current directory or in the paths you pass in.',options:['-a  do not ignore entries starting with .','-l  use a long listing format','-h  with -l, print human readable sizes','-R  list subdirectories recursively'],examples:['ls','ls -la /etc','ls -lh ~/projects'],seealso:['cd(1)','find(1)','stat(1)']},
+  cd:{section:'1',name:'cd',summary:'change the shell working directory',synopsis:'cd [DIR]',description:'Change the current working directory. With no argument, switch to the home directory.',examples:['cd /var/log','cd ..','cd ~'],seealso:['pwd(1)','pushd(1)','popd(1)']},
+  pwd:{section:'1',name:'pwd',summary:'print name of current working directory',synopsis:'pwd [OPTION]...',description:'Print the absolute pathname of the current working directory.',examples:['pwd'],seealso:['cd(1)','sh(1)']},
+  grep:{section:'1',name:'grep',summary:'print lines that match patterns',synopsis:'grep [OPTION]... PATTERN [FILE]...',description:'Search text for a pattern and print matching lines.',options:['-i  ignore case distinctions','-n  print line numbers','-r  read all files under each directory, recursively','-v  invert the sense of matching','-c  print only a count of matching lines'],examples:['grep TODO todo.txt','grep -rin "server" /home/user/projects'],seealso:['find(1)','sed(1)','awk(1)']},
+  find:{section:'1',name:'find',summary:'search for files in a directory hierarchy',synopsis:'find [PATH] [EXPRESSION]',description:'Walk a directory tree and filter entries by name or type.',options:['-name PATTERN  match file name with glob syntax','-type f|d  match files or directories'],examples:['find /home/user -name "*.js"','find . -type d'],seealso:['grep(1)','locate(1)']},
+  cat:{section:'1',name:'cat',summary:'concatenate files and print on the standard output',synopsis:'cat [OPTION]... [FILE]...',description:'Display file contents or pass stdin through unchanged.',examples:['cat notes.txt','cat README.md | grep WebLinux'],seealso:['head(1)','tail(1)','less(1)']},
+  chmod:{section:'1',name:'chmod',summary:'change file mode bits',synopsis:'chmod MODE FILE...',description:'Change the permissions associated with a file or directory.',examples:['chmod 755 app.js','chmod 644 data.json'],seealso:['chown(1)','chgrp(1)']},
+  chown:{section:'1',name:'chown',summary:'change file owner and group',synopsis:'chown OWNER[:GROUP] FILE...',description:'Change the owner, and optionally the group, of a file or directory.',examples:['chown root:root /etc/hosts','chown user notes.txt'],seealso:['chmod(1)','chgrp(1)']},
+  mkdir:{section:'1',name:'mkdir',summary:'make directories',synopsis:'mkdir [OPTION]... DIRECTORY...',description:'Create one or more directories.',options:['-p  no error if existing, make parent directories as needed'],examples:['mkdir projects','mkdir -p ~/work/app'],seealso:['rmdir(1)','cd(1)']},
+  rm:{section:'1',name:'rm',summary:'remove files or directories',synopsis:'rm [OPTION]... [FILE]...',description:'Remove files and directories from the virtual file system.',options:['-r, -R  remove directories and their contents recursively','-f  ignore nonexistent files and arguments, never prompt'],examples:['rm notes.txt','rm -rf old-project'],seealso:['rmdir(1)','mv(1)']},
+  cp:{section:'1',name:'cp',summary:'copy files and directories',synopsis:'cp [OPTION]... SOURCE DEST',description:'Copy files or directories to a new location.',examples:['cp notes.txt backup.txt','cp -r projects projects-old'],seealso:['mv(1)','rm(1)']},
+  mv:{section:'1',name:'mv',summary:'move or rename files',synopsis:'mv [OPTION]... SOURCE DEST',description:'Move files or rename them inside the virtual file system.',examples:['mv todo.txt tasks.txt','mv projects /tmp/'],seealso:['cp(1)','rm(1)']},
+  echo:{section:'1',name:'echo',summary:'display a line of text',synopsis:'echo [OPTION]... [STRING]...',description:'Print the given arguments to standard output with simple environment expansion.',options:['-n  do not output the trailing newline'],examples:['echo hello world','echo $HOME'],seealso:['printf(1)']},
+  touch:{section:'1',name:'touch',summary:'change file timestamps or create files',synopsis:'touch [OPTION]... FILE...',description:'Create a file if it does not exist, or update its modification time.',examples:['touch notes.txt','touch logs/today.log'],seealso:['stat(1)']},
+  head:{section:'1',name:'head',summary:'output the first part of files',synopsis:'head [OPTION]... [FILE]...',description:'Print the first lines from a file or from stdin.',options:['-n NUM  print the first NUM lines'],examples:['head -n 5 todo.txt','cat notes.txt | head'],seealso:['tail(1)','cat(1)']},
+  tail:{section:'1',name:'tail',summary:'output the last part of files',synopsis:'tail [OPTION]... [FILE]...',description:'Print the last lines from a file or from stdin.',options:['-n NUM  print the last NUM lines','-f  follow appended data (simulated)'],examples:['tail -n 20 sys.log','tail -f auth.log'],seealso:['head(1)','less(1)']},
+  wc:{section:'1',name:'wc',summary:'print newline, word, and byte counts',synopsis:'wc [OPTION]... [FILE]...',description:'Count lines, words, and characters in text.',options:['-l  print line counts','-w  print word counts','-c  print byte counts'],examples:['wc todo.txt','cat notes.txt | wc -w'],seealso:['sort(1)','uniq(1)']},
+  sort:{section:'1',name:'sort',summary:'sort lines of text files',synopsis:'sort [OPTION]... [FILE]...',description:'Sort the input lines lexicographically or numerically.',options:['-r  reverse the result of comparisons','-n  compare according to string numerical value','-u  output only the first of an equal run'],examples:['sort todo.txt','cat numbers.txt | sort -n'],seealso:['uniq(1)','wc(1)']},
+  uniq:{section:'1',name:'uniq',summary:'report or filter repeated lines',synopsis:'uniq [OPTION]... [INPUT [OUTPUT]]',description:'Filter adjacent matching lines from sorted input.',options:['-c  prefix lines by the number of occurrences','-d  only print duplicate lines'],examples:['sort names.txt | uniq','sort names.txt | uniq -c'],seealso:['sort(1)']},
+  cut:{section:'1',name:'cut',summary:'remove sections from each line of files',synopsis:'cut -d DELIM -f LIST [FILE]...',description:'Select specific fields from delimited text.',examples:['cut -d "," -f 1 data.csv','cut -f 1,3 hosts.tsv'],seealso:['awk(1)','sed(1)']},
+  sed:{section:'1',name:'sed',summary:'stream editor for filtering and transforming text',synopsis:'sed SCRIPT [FILE]...',description:'Apply simple substitutions to each input line.',examples:['sed s/old/new/g notes.txt','cat file.txt | sed s/foo/bar/'],seealso:['awk(1)','grep(1)']},
+  awk:{section:'1',name:'awk',summary:'pattern scanning and processing language',synopsis:'awk [OPTION]... PROGRAM [FILE]...',description:'Pattern-based text processing with field extraction support.',examples:['awk "{print $1}" hosts','awk -F: "{print $1}" /etc/passwd'],seealso:['sed(1)','cut(1)']},
+  ps:{section:'1',name:'ps',summary:'report a snapshot of current processes',synopsis:'ps [OPTIONS]',description:'Show the simulated process table for the current session.',examples:['ps','ps aux'],seealso:['top(1)','kill(1)']},
+  kill:{section:'1',name:'kill',summary:'send a signal to a process',synopsis:'kill [OPTION]... PID...',description:'Send a signal to one or more simulated processes.',options:['-9  forcefully terminate a process','-15  request graceful termination'],examples:['kill 12','kill -9 14'],seealso:['ps(1)','top(1)']},
+  top:{section:'1',name:'top',summary:'display Linux processes',synopsis:'top',description:'Show a live process snapshot with CPU and memory information.',examples:['top'],seealso:['ps(1)','kill(1)']},
+  ping:{section:'8',name:'ping',summary:'send ICMP ECHO_REQUEST packets to network hosts',synopsis:'ping [OPTION]... HOST',description:'Test connectivity to a host with simulated ICMP replies.',options:['-c N  stop after sending N packets'],examples:['ping example.com','ping -c 3 8.8.8.8'],seealso:['ifconfig(8)','netstat(8)']},
+  tar:{section:'1',name:'tar',summary:'an archiving utility',synopsis:'tar [cxtf] ARCHIVE [FILE]...',description:'Create, inspect, or extract simulated tar archives.',examples:['tar cf backup.tar notes.txt','tar tf archive.tar'],seealso:['zip(1)','gzip(1)']},
+  apt:{section:'8',name:'apt',summary:'command-line package manager',synopsis:'apt [update|install|remove|list]',description:'Manage the simulated package set used by the terminal.',examples:['apt update','apt install htop','apt list'],seealso:['dpkg(1)','man-db(8)']},
+  df:{section:'1',name:'df',summary:'report file system disk space usage',synopsis:'df [OPTION]...',description:'Display available and used space for mounted filesystems.',options:['-h  print sizes in human readable format'],examples:['df','df -h'],seealso:['du(1)']},
+  du:{section:'1',name:'du',summary:'estimate file space usage',synopsis:'du [OPTION]... [FILE]...',description:'Summarize disk usage for files and directories.',options:['-h  human readable sizes','-s  display only a total for each argument'],examples:['du -sh .','du -h /home/user'],seealso:['df(1)']},
+  free:{section:'1',name:'free',summary:'display amount of free and used memory in the system',synopsis:'free [OPTION]...',description:'Show memory usage for the simulated system.',options:['-h  print human readable output'],examples:['free','free -h'],seealso:['top(1)']},
+  less:{section:'1',name:'less',summary:'opposite of more',synopsis:'less FILE',description:'View a file one screen at a time; in this terminal it is rendered as a static page ending marker.',examples:['less README.md'],seealso:['cat(1)','head(1)','tail(1)']},
+  history:{section:'1',name:'history',summary:'command history',synopsis:'history',description:'Show commands entered in the current browser session.',examples:['history'],seealso:['fc(1)']},
+  man:{section:'1',name:'man',summary:'an interface to the system reference manuals',synopsis:'man [OPTION]... [SECTION] PAGE...',description:'Show detailed manual pages, summaries, or search results from the built-in static manual database.',options:['-f, --whatis  display a one-line description for a manual page','-k, --apropos  search the one-line descriptions for a keyword'],examples:['man ls','man -f grep','man -k network','man 5 passwd'],seealso:['help(1)','info(1)']},
+  help:{section:'1',name:'help',summary:'display help for built-in commands',synopsis:'help',description:'Show a categorized list of commands supported by the terminal.',examples:['help'],seealso:['man(1)']},
+  clear:{section:'1',name:'clear',summary:'clear the terminal screen',synopsis:'clear',description:'Clear the visible terminal output and reset the prompt line.',examples:['clear'],seealso:['reset(1)']},
+  date:{section:'1',name:'date',summary:'print or set the system date and time',synopsis:'date',description:'Show the current local date and time in the browser session.',examples:['date'],seealso:['cal(1)']},
+  cal:{section:'1',name:'cal',summary:'display a calendar',synopsis:'cal',description:'Render the current month in a compact terminal calendar.',examples:['cal'],seealso:['date(1)']},
+  env:{section:'1',name:'env',summary:'print the environment',synopsis:'env',description:'Display the current shell environment variables.',examples:['env'],seealso:['printenv(1)']},
+  uname:{section:'1',name:'uname',summary:'print system information',synopsis:'uname [OPTION]...',description:'Return information about the simulated kernel and host.',examples:['uname','uname -a'],seealso:['hostname(1)']},
+  whoami:{section:'1',name:'whoami',summary:'print effective user name',synopsis:'whoami',description:'Display the name of the current user.',examples:['whoami'],seealso:['id(1)','who(1)']},
+  who:{section:'1',name:'who',summary:'show who is logged on',synopsis:'who',description:'Show the current logged-in session information.',examples:['who'],seealso:['whoami(1)']},
+  hostname:{section:'1',name:'hostname',summary:'show or set the system host name',synopsis:'hostname',description:'Print the simulated host name for the terminal session.',examples:['hostname'],seealso:['uname(1)']},
+  id:{section:'1',name:'id',summary:'print real and effective user and group IDs',synopsis:'id',description:'Display the current simulated UID, GID, and groups.',examples:['id'],seealso:['whoami(1)']},
+  useradd:{section:'8',name:'useradd',summary:'create a new user or update default new user information',synopsis:'useradd USER',description:'Create a new simulated user account and home directory.',examples:['useradd alice'],seealso:['userdel(8)','passwd(1)']},
+  userdel:{section:'8',name:'userdel',summary:'delete a user account and related files',synopsis:'userdel USER',description:'Remove a simulated user account.',examples:['userdel alice'],seealso:['useradd(8)','passwd(1)']},
+  passwd:{section:'1',name:'passwd',summary:'change user password',synopsis:'passwd [USER]',description:'Update the password for a simulated account.',examples:['passwd','passwd alice'],seealso:['useradd(8)','userdel(8)']},
+  ifconfig:{section:'8',name:'ifconfig',summary:'configure network interfaces',synopsis:'ifconfig',description:'Display the simulated network interface configuration.',examples:['ifconfig'],seealso:['ping(8)','netstat(8)']},
+  netstat:{section:'8',name:'netstat',summary:'network statistics',synopsis:'netstat',description:'Show active sockets and listening ports in the simulation.',examples:['netstat'],seealso:['ifconfig(8)','ss(8)']},
+  ssh:{section:'1',name:'ssh',summary:'OpenSSH remote login client',synopsis:'ssh [USER@]HOST',description:'Attempt a simulated SSH connection to a remote host.',examples:['ssh user@example.com'],seealso:['scp(1)','ping(8)']},
+  scp:{section:'1',name:'scp',summary:'secure copy files over SSH',synopsis:'scp SOURCE TARGET',description:'Simulated secure copy client for remote transfer workflows.',examples:['scp file.txt user@example.com:/tmp/'],seealso:['ssh(1)']}
+};
+
+function manRecord(name){return Man[name]||null}
+
+function manPage(name,section){
+  const entry=manRecord(name);
+  if(!entry)return null;
+  if(section&&String(section)!==String(entry.section))return null;
+  const out=[];
+  out.push(`MAN(${entry.section})${entry.name.toUpperCase()}`);
+  out.push('');
+  out.push('NAME');
+  out.push(`    ${entry.name} - ${entry.summary}`);
+  out.push('');
+  out.push('SYNOPSIS');
+  out.push(`    ${entry.synopsis}`);
+  if(entry.description){out.push('');out.push('DESCRIPTION');out.push(`    ${entry.description}`)}
+  if(entry.options&&entry.options.length){out.push('');out.push('OPTIONS');for(const opt of entry.options)out.push(`    ${opt}`)}
+  if(entry.examples&&entry.examples.length){out.push('');out.push('EXAMPLES');for(const ex of entry.examples)out.push(`    $ ${ex}`)}
+  if(entry.seealso&&entry.seealso.length){out.push('');out.push('SEE ALSO');out.push(`    ${entry.seealso.join(', ')}`)}
+  return out.join('\n');
+}
+
+function manWhatis(name){
+  const entry=manRecord(name);
+  if(!entry)return null;
+  return `${entry.name} (${entry.section}) - ${entry.summary}`;
+}
+
+function manApropos(term){
+  const needle=(term||'').toLowerCase();
+  if(!needle)return 'apropos: keyword expected';
+  const hits=Object.values(Man)
+    .filter(entry=>[entry.name,entry.summary,entry.description,...(entry.options||[]),...(entry.examples||[])].join(' ').toLowerCase().includes(needle))
+    .map(entry=>`${entry.name} (${entry.section}) - ${entry.summary}`);
+  return hits.length?hits.join('\n'):'apropos: nothing appropriate';
+}
 
 /* ====== COMMANDS ====== */
 const C={};
@@ -185,7 +273,22 @@ C.clear=()=>'\x1b[CLEAR]';
 C.date=()=>new Date().toString();
 C.cal=()=>{const now=new Date(),y=now.getFullYear(),m=now.getMonth();const mo=['January','February','March','April','May','June','July','August','September','October','November','December'];let cal=`    ${mo[m]} ${y}\nSu Mo Tu We Th Fr Sa\n`;const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();let line='   '.repeat(fd);for(let d=1;d<=dim;d++){const ds=d===now.getDate()?`\x1b[7m${String(d).padStart(2)}\x1b[0m`:String(d).padStart(2);line+=ds;if((fd+d)%7===0){cal+=line+'\n';line=''}else line+=' '}if(line.trim())cal+=line;return cal};
 C.echo=(args,s)=>{let start=0;if(args[0]==='-n')start=1;let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,'/home/user').replace(/\$USER/g,US.cur()).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');text=text.replace(/^"(.*)"$/s,'$1').replace(/^'(.*)'$/s,'$1');return text};
-C.man=(args)=>{if(!args.length)return"What manual page do you want?\nTry 'man man'.";return Man[args[0]]||`No manual entry for ${args[0]}`};
+C.man=(args)=>{
+  if(!args.length)return"What manual page do you want?\nTry 'man man'.";
+  if(args[0]==='-f'||args[0]==='--whatis')return args[1]?manWhatis(args[1])||`No manual entry for ${args[1]}`:'whatis: what manual page do you want?';
+  if(args[0]==='-k'||args[0]==='--apropos')return args[1]?manApropos(args.slice(1).join(' ')):'apropos: what keyword do you want?';
+  if(args[0]==='-a'){
+    const target=args[1];
+    if(!target)return 'man: missing manual page name';
+    const page=manPage(target);
+    return page||`No manual entry for ${target}`;
+  }
+  let section=null;
+  let target=args[0];
+  if(/^\d+$/.test(args[0])&&args[1]){section=args[0];target=args[1]}
+  const page=manPage(target,section);
+  return page||`No manual entry for ${target}${section?` in section ${section}`:''}`;
+};
 C.env=(a,s)=>`HOME=/home/user\nUSER=${US.cur()}\nSHELL=/bin/bash\nPWD=${s.cwd}\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nHOSTNAME=weblinux\nTERM=xterm-256color\nLANG=en_US.UTF-8`;
 C.export=()=>'';C.alias=()=>'';
 C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
