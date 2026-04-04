@@ -178,6 +178,7 @@ const Man={
   scp:{section:'1',name:'scp',summary:'secure copy files over SSH',synopsis:'scp SOURCE TARGET',description:'Simulated secure copy client for remote transfer workflows.',examples:['scp file.txt user@example.com:/tmp/'],seealso:['ssh(1)']}
 };
 
+
 function manRecord(name){return Man[name]||null}
 
 function manPage(name,section){
