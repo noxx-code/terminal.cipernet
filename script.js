@@ -543,7 +543,7 @@ function initFS(){
     let skipNextDelete=false;
     let skipNextLineBreak=false;
 
-    function extractInsertedChars(prev,curr){
+    function diffHiddenValue(prev,curr){
       let start=0;
       while(start<prev.length&&start<curr.length&&prev[start]===curr[start])start++;
 
@@ -551,7 +551,10 @@ function initFS(){
       let currEnd=curr.length-1;
       while(prevEnd>=start&&currEnd>=start&&prev[prevEnd]===curr[currEnd]){prevEnd--;currEnd--;}
 
-      return curr.slice(start,currEnd+1);
+      return {
+        deletedCount: Math.max(0,prevEnd-start+1),
+        insertedText: curr.slice(start,currEnd+1)
+      };
     }
 
     hiddenInput.addEventListener('keydown',function(ev){
@@ -579,14 +582,6 @@ function initFS(){
       const inputType=ev.inputType||'';
       const currentValue=hiddenInput.value||'';
 
-      if(inputType==='deleteContentBackward'){
-        if(!skipNextDelete)backspaceOnce();
-        skipNextDelete=false;
-        hiddenPrevValue=currentValue;
-        if(currentValue.length>32){hiddenInput.value='';hiddenPrevValue='';}
-        return;
-      }
-
       if(inputType==='insertLineBreak'){
         if(!skipNextLineBreak)submit();
         skipNextLineBreak=false;
@@ -595,9 +590,17 @@ function initFS(){
         return;
       }
 
-      const inserted=extractInsertedChars(hiddenPrevValue,currentValue);
-      if(inserted){
-        for(const ch of inserted){
+      const delta=diffHiddenValue(hiddenPrevValue,currentValue);
+      let deletesToApply=delta.deletedCount;
+      if(skipNextDelete&&deletesToApply>0){
+        deletesToApply=Math.max(0,deletesToApply-1);
+      }
+      skipNextDelete=false;
+
+      for(let i=0;i<deletesToApply;i++)backspaceOnce();
+
+      if(delta.insertedText){
+        for(const ch of delta.insertedText){
           if(ch==='\n'||ch==='\r')submit();
           else insertChars(ch);
         }
