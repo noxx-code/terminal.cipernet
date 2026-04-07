@@ -516,6 +516,7 @@ function initFS(){
 
   /* Keys */
   document.addEventListener('keydown',function(ev){
+    if(hiddenInput&&ev.target===hiddenInput)return;
     const k=ev.key;
     if(ev.ctrlKey&&k==='c'){ev.preventDefault();removeIL();wl(promptH()+esc(st.input)+'^C');st.input='';st.cursor=0;renderInput();scroll();return}
     if(ev.ctrlKey&&k==='l'){ev.preventDefault();el.innerHTML='';renderInput();scroll();return}
@@ -536,7 +537,7 @@ function initFS(){
     if(k==='End'){ev.preventDefault();st.cursor=st.input.length;renderInput();return}
     if(k.length===1&&!ev.ctrlKey&&!ev.altKey&&!ev.metaKey){ev.preventDefault();insertChars(k)}
   });
-  document.addEventListener('paste',function(ev){ev.preventDefault();const t=(ev.clipboardData||window.clipboardData).getData('text').replace(/[\r\n]+/g,'');st.input=st.input.slice(0,st.cursor)+t+st.input.slice(st.cursor);st.cursor+=t.length;renderInput();scroll()});
+  document.addEventListener('paste',function(ev){if(hiddenInput&&ev.target===hiddenInput)return;ev.preventDefault();const t=(ev.clipboardData||window.clipboardData).getData('text').replace(/[\r\n]+/g,'');st.input=st.input.slice(0,st.cursor)+t+st.input.slice(st.cursor);st.cursor+=t.length;renderInput();scroll()});
   if(hiddenInput){
     hiddenInput.addEventListener('keydown',function(ev){
       if(ev.key==='Enter'){ev.preventDefault();ev.stopPropagation();submit();hiddenInput.value='';return}
