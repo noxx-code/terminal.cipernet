@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WebLinux Terminal</title>
 <link rel="stylesheet" href="styles.css">
-<script src="script.js" defer></script>  
+<script src="script.js" defer></script>
+<script src="keyboard.js" defer></script>
 <link rel="icon" type="image/png" href="images/favicon.png">
 </head>
 <body>
@@ -23,7 +24,6 @@
         <div class="title-bar-title">user@weblinux <span>~</span> <span>— bash</span></div>
       </div>
       <div class="terminal-body">
-        <input id="terminal-input" class="terminal-hidden-input" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-hidden="true" tabindex="-1">
         <div id="terminal" tabindex="0"></div>
       </div>
       <div class="status-bar">
