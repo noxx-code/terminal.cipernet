@@ -413,6 +413,7 @@ function initFS(){
 (function boot(){
   initFS();
   const el=document.getElementById('terminal');
+  const hiddenInput=document.getElementById('terminal-input');
   const st={cwd:'/home/user',history:[],historyIdx:-1,input:'',cursor:0,saved:''};
   const scheduleTerminalFit = ()=>TerminalFit.schedule(el);
 
@@ -520,5 +521,9 @@ function initFS(){
     if(k.length===1&&!ev.ctrlKey&&!ev.altKey&&!ev.metaKey){ev.preventDefault();st.input=st.input.slice(0,st.cursor)+k+st.input.slice(st.cursor);st.cursor++;renderInput();scroll()}
   });
   document.addEventListener('paste',function(ev){ev.preventDefault();const t=(ev.clipboardData||window.clipboardData).getData('text').replace(/[\r\n]+/g,'');st.input=st.input.slice(0,st.cursor)+t+st.input.slice(st.cursor);st.cursor+=t.length;renderInput();scroll()});
-  el.addEventListener('click',()=>el.focus());
+  const focusHiddenInput=()=>{
+    if(hiddenInput) hiddenInput.focus({preventScroll:true});
+  };
+  el.addEventListener('click',focusHiddenInput);
+  el.addEventListener('touchstart',focusHiddenInput,{passive:true});
 })();
