@@ -383,16 +383,6 @@ function initFS(){
 
   /* Boot sequence - typewriter style */
   const bootLines = [
-    '\x1b[90m[    0.000000] Linux version 6.5.0-generic (gcc 12.3.0) #1 SMP PREEMPT_DYNAMIC x86_64\x1b[0m',
-    '\x1b[90m[    0.000001] Command line: BOOT_IMAGE=/vmlinuz-6.5.0-generic root=/dev/sda1\x1b[0m',
-    '\x1b[90m[    0.041523] ACPI: Early table checksum verification disabled\x1b[0m',
-    '\x1b[90m[    0.087341] Memory: 8052736K available (16384K kernel code, 4096K rwdata)\x1b[0m',
-    '\x1b[90m[    0.142001] CPU: Intel(R) Core(TM) i7-12700H @ 2.30GHz (family: 0x6, model: 0x9a)\x1b[0m',
-    '\x1b[90m[    0.245120] smpboot: Estimated ratio of average max frequency by base frequency: 161%\x1b[0m',
-    '\x1b[90m[    0.312004] NET: Registered PF_INET protocol family\x1b[0m',
-    '\x1b[90m[    0.451002] EXT4-fs (sda1): mounted filesystem with ordered data mode\x1b[0m',
-    '\x1b[90m[    0.523410] systemd[1]: Detected architecture x86-64.\x1b[0m',
-    '',
     '\x1b[1;32m  ██╗    ██╗███████╗██████╗ ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗\x1b[0m',
     '\x1b[1;32m  ██║    ██║██╔════╝██╔══██╗██║     ██║████╗  ██║██║   ██║╚██╗██╔╝\x1b[0m',
     '\x1b[1;32m  ██║ █╗ ██║█████╗  ██████╔╝██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝\x1b[0m',
@@ -400,7 +390,7 @@ function initFS(){
     '\x1b[1;32m  ╚███╔███╔╝███████╗██████╔╝███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗\x1b[0m',
     '\x1b[1;32m   ╚══╝╚══╝ ╚══════╝╚═════╝ ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝\x1b[0m',
     '',
-    '\x1b[37m  WebLinux Terminal v1.0\x1b[0m  \x1b[90m·\x1b[0m  \x1b[33mKernel\x1b[0m 6.5.0-generic  \x1b[90m·\x1b[0m  \x1b[33mShell\x1b[0m bash 5.2',
+    '\x1b[37m  WebLinux Terminal v1.1\x1b[0m  \x1b[90m·\x1b[0m  \x1b[33mKernel\x1b[0m 6.5.0-generic  \x1b[90m·\x1b[0m  \x1b[33mShell\x1b[0m bash 5.2',
     '\x1b[90m  Type "help" for available commands · "man <cmd>" for details\x1b[0m',
     ''
   ];
@@ -410,7 +400,7 @@ function initFS(){
     if(bootIdx < bootLines.length){
       writeOut(bootLines[bootIdx]);
       bootIdx++;
-      const delay = bootIdx <= 9 ? 40 : 15;
+      const delay = 15;
       setTimeout(bootStep, delay);
     } else {
       renderInput();
