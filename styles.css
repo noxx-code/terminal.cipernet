@@ -173,19 +173,6 @@ html, body {
   background: var(--bg-terminal);
 }
 
-.terminal-hidden-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-  left: 0;
-  top: 0;
-  border: 0;
-  padding: 0;
-  margin: 0;
-}
-
 /* Scanline overlay */
 .terminal-body::before {
   content: '';
@@ -374,6 +361,51 @@ html, body {
 
 .sidebar-ad::-webkit-scrollbar { width: 0; }
 
+.on-screen-keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  background: #0d0d0d;
+  border-top: 1px solid var(--border-frame);
+  padding: 8px;
+  display: none;
+}
+
+.on-screen-keyboard-row {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.on-screen-keyboard-row:last-child {
+  margin-bottom: 0;
+}
+
+.on-screen-keyboard button {
+  appearance: none;
+  border: 1px solid #2a2a2a;
+  background: #161616;
+  color: var(--text-primary);
+  font: 500 12px/1 'JetBrains Mono', 'IBM Plex Mono', monospace;
+  border-radius: 6px;
+  min-height: 34px;
+}
+
+.on-screen-keyboard button:active {
+  background: #202020;
+}
+
+.on-screen-keyboard .key-wide {
+  grid-column: span 2;
+}
+
+.on-screen-keyboard .key-space {
+  grid-column: span 4;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
   .sidebar-ad { width: 200px; min-width: 200px; max-width: 200px; }
@@ -391,6 +423,12 @@ html, body {
   }
   .terminal-body {
     overflow: hidden;
+  }
+  body.mobile-keyboard-active .on-screen-keyboard {
+    display: block;
+  }
+  body.mobile-keyboard-active .window-frame {
+    padding-bottom: 164px;
   }
 }
 
