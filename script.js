@@ -17,6 +17,70 @@ function updateStatusCwd(cwd){
   if(tb) tb.innerHTML = `user@weblinux <span>${dp}</span> <span>— bash</span>`;
 }
 
+/* ====== TERMINAL FITTING ====== */
+const TerminalFit = (()=>{
+  const MIN_FONT_SIZE = 8;
+  const MAX_FONT_SIZE = 13;
+  const BASE_FONT_SIZE = 13;
+  const measurementCanvas = document.createElement('canvas');
+  const measurementContext = measurementCanvas.getContext('2d');
+  let frameId = 0;
+
+  function getLongestLineLength(el){
+    let longest = 0;
+    for(const node of el.children){
+      const text = node.textContent || '';
+      const lines = text.split(/\r?\n/);
+      for(const line of lines){
+        if(line.length > longest) longest = line.length;
+      }
+    }
+    return longest;
+  }
+
+  function getAvailableWidth(el){
+    const parent = el.parentElement;
+    if(!parent) return 0;
+    const style = getComputedStyle(el);
+    const paddingLeft = parseFloat(style.paddingLeft) || 0;
+    const paddingRight = parseFloat(style.paddingRight) || 0;
+    return Math.max(0, parent.clientWidth - paddingLeft - paddingRight);
+  }
+
+  function measureCharacterWidth(el, fontSize){
+    if(!measurementContext) return fontSize * 0.6;
+    const style = getComputedStyle(el);
+    measurementContext.font = `${style.fontStyle} ${style.fontWeight} ${fontSize}px ${style.fontFamily}`;
+    const sample = '00000000000000000000';
+    return measurementContext.measureText(sample).width / sample.length || fontSize * 0.6;
+  }
+
+  function apply(el){
+    const availableWidth = getAvailableWidth(el);
+    if(!availableWidth) return;
+
+    const longestLineLength = Math.max(1, getLongestLineLength(el));
+    const baseCharacterWidth = measureCharacterWidth(el, BASE_FONT_SIZE);
+    const idealFontSize = availableWidth / (longestLineLength * (baseCharacterWidth / BASE_FONT_SIZE));
+    const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.floor(idealFontSize)));
+    const widthAtFontSize = longestLineLength * baseCharacterWidth * (fontSize / BASE_FONT_SIZE);
+    const scale = widthAtFontSize > availableWidth ? availableWidth / widthAtFontSize : 1;
+
+    el.style.setProperty('--terminal-font-size', `${fontSize}px`);
+    el.style.setProperty('--terminal-scale', String(Math.min(1, scale)));
+  }
+
+  function schedule(el){
+    if(frameId) cancelAnimationFrame(frameId);
+    frameId = requestAnimationFrame(()=>{
+      frameId = 0;
+      apply(el);
+    });
+  }
+
+  return { schedule };
+})();
+
 /* ====== ANSI PARSER ====== */
 const Ansi=(()=>{
   const FG={30:'#6e7681',31:'#ff5c57',32:'#5af78e',33:'#f3f99d',34:'#57c7ff',35:'#c792ea',36:'#9aedfe',37:'#f0f6fc',
@@ -350,6 +414,22 @@ function initFS(){
   initFS();
   const el=document.getElementById('terminal');
   const st={cwd:'/home/user',history:[],historyIdx:-1,input:'',cursor:0,saved:''};
+  const scheduleTerminalFit = ()=>TerminalFit.schedule(el);
+
+  if(document.fonts && document.fonts.ready){
+    document.fonts.ready.then(scheduleTerminalFit);
+  }
+
+  if('ResizeObserver' in window){
+    const resizeObserver = new ResizeObserver(()=>scheduleTerminalFit());
+    if(el.parentElement) resizeObserver.observe(el.parentElement);
+  }
+
+  const mutationObserver = new MutationObserver(()=>scheduleTerminalFit());
+  mutationObserver.observe(el,{childList:true,subtree:true,characterData:true});
+
+  window.addEventListener('resize', scheduleTerminalFit, {passive:true});
+  window.addEventListener('orientationchange', scheduleTerminalFit, {passive:true});
 
   function promptH(){
     let dp=st.cwd;
@@ -367,9 +447,10 @@ function initFS(){
     const cc=st.cursor<st.input.length?esc(st.input[st.cursor]):' ';
     const a=st.cursor<st.input.length?esc(st.input.slice(st.cursor+1)):'';
     il.innerHTML=promptH()+b+'<span class="cursor-char cursor-blink">'+cc+'</span>'+a;
+    scheduleTerminalFit();
   }
 
-  function wl(html){const d=document.createElement('div');d.className='output-line';d.innerHTML=html;el.appendChild(d)}
+  function wl(html){const d=document.createElement('div');d.className='output-line';d.innerHTML=html;el.appendChild(d);scheduleTerminalFit()}
   function writeOut(text){if(!text)return;const h=Ansi.toHtml(text);h.split('\n').forEach(l=>wl(l||' '))}
   function removeIL(){const il=document.getElementById('il');if(il)il.remove()}
   function scroll(){el.scrollTop=el.scrollHeight}
