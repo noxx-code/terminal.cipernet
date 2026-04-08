@@ -13,9 +13,9 @@
   const layout = [
     ["1","2","3","4","5","6","7","8","9","0"],
     ["q","w","e","r","t","y","u","i","o","p"],
-    ["a","s","d","f","g","h","j","k","l","Backspace"],
-    ["z","x","c","v","b","n","m",",",".","?","Enter"],
-    ["Shift","Space","Backspace","Enter"]
+    ["a","s","d","f","g","h","j","k","l","⌫"],
+    ["z","x","c","v","b","n","m",",",".","?","↵"],
+    ["⇧","Space","⌫","↵"]
   ];
   const symbolMap = {
     Escape: "ESC",
@@ -42,16 +42,25 @@
     return /^[a-z]$/i.test(key);
   }
 
-  function resolveKeyPress(key){
-    if(key === "Shift") return null;
-    if(shiftEnabled && isLetter(key)) return key.toUpperCase();
+  function normalizeKey(key){
+    if(key === "⌫") return "Backspace";
+    if(key === "↵") return "Enter";
+    if(key === "⇧") return "Shift";
     return key;
   }
 
+  function resolveKeyPress(key){
+    const normalized = normalizeKey(key);
+    if(normalized === "Shift") return null;
+    if(shiftEnabled && isLetter(normalized)) return normalized.toUpperCase();
+    return normalized;
+  }
+
   function keyLabel(key){
-    if(key === "Space") return "space";
-    if(symbolMap[key]) return symbolMap[key];
-    if(shiftEnabled && isLetter(key)) return key.toUpperCase();
+    const normalized = normalizeKey(key);
+    if(normalized === "Space") return "space";
+    if(symbolMap[normalized]) return symbolMap[normalized];
+    if(shiftEnabled && isLetter(normalized)) return normalized.toUpperCase();
     return key;
   }
 
@@ -65,10 +74,12 @@
       button.dataset.key = key;
       button.textContent = keyLabel(key);
 
-      if(key === "Backspace" || key === "Enter" || key === "Tab" || key === "Shift") button.classList.add("key-wide");
-      if(key === "Space") button.classList.add("key-space");
+      const normalized = normalizeKey(key);
+
+      if(normalized === "Backspace" || normalized === "Enter" || normalized === "Tab" || normalized === "Shift") button.classList.add("key-wide");
+      if(normalized === "Space") button.classList.add("key-space");
       if(rowClass === "on-screen-keyboard-utility-row") button.classList.add("key-action");
-      if(key === "Backspace" || key === "Enter" || key === "Shift") button.classList.add("key-action");
+      if(normalized === "Backspace" || normalized === "Enter" || normalized === "Shift") button.classList.add("key-action");
 
       const press = (ev)=>{
         ev.preventDefault();
@@ -76,7 +87,7 @@
         if(ev.type === "click" && Date.now() - lastTouchAt < 300) return;
         if(ev.type === "touchstart") lastTouchAt = Date.now();
 
-        if(key === "Shift"){
+        if(normalized === "Shift"){
           shiftEnabled = !shiftEnabled;
           keyboard.classList.toggle("shift-active", shiftEnabled);
           refreshLabels();
@@ -100,8 +111,9 @@
     for(const button of keys){
       const key = button.dataset.key;
       if(!key) continue;
+      const normalized = normalizeKey(key);
       button.textContent = keyLabel(key);
-      if(key === "Shift") button.classList.toggle("key-toggled", shiftEnabled);
+      if(normalized === "Shift") button.classList.toggle("key-toggled", shiftEnabled);
     }
   }
 
