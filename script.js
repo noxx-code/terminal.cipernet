@@ -1,24 +1,36 @@
 "use strict";
 
 /* ====== STATUS BAR CLOCK ====== */
-(function updateClock(){
-  const el = document.getElementById('status-time');
-  if(el) el.textContent = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+(function updateClock() {
+  const timeElement = document.getElementById('status-time');
+  if (timeElement) {
+    timeElement.textContent = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+  }
+
   setTimeout(updateClock, 1000);
 })();
 
-function updateStatusCwd(cwd){
-  const el = document.getElementById('status-cwd');
-  const tb = document.querySelector('.title-bar-title');
-  let dp = cwd;
-  if(dp.startsWith('/home/user')) dp = '~' + dp.slice(10);
-  if(!dp) dp = '~';
-  if(el) el.textContent = dp;
-  if(tb) tb.innerHTML = `user@weblinux <span>${dp}</span> <span>— bash</span>`;
+function updateStatusCwd(cwd) {
+  const cwdElement = document.getElementById('status-cwd');
+  const titleBarElement = document.querySelector('.title-bar-title');
+
+  let displayPath = cwd;
+  if (displayPath.startsWith('/home/user')) displayPath = `~${displayPath.slice(10)}`;
+  if (!displayPath) displayPath = '~';
+
+  if (cwdElement) cwdElement.textContent = displayPath;
+  if (titleBarElement) {
+    titleBarElement.innerHTML = `user@weblinux <span>${displayPath}</span> <span>— bash</span>`;
+  }
 }
 
 /* ====== TERMINAL FITTING ====== */
-const TerminalFit = (()=>{
+const TerminalFit = (() => {
   const MIN_FONT_SIZE = 8;
   const MAX_FONT_SIZE = 13;
   const BASE_FONT_SIZE = 13;
@@ -26,55 +38,58 @@ const TerminalFit = (()=>{
   const measurementContext = measurementCanvas.getContext('2d');
   let frameId = 0;
 
-  function getLongestLineLength(el){
+  function getLongestLineLength(terminalElement) {
     let longest = 0;
-    for(const node of el.children){
+    for (const node of terminalElement.children) {
       const text = node.textContent || '';
       const lines = text.split(/\r?\n/);
-      for(const line of lines){
-        if(line.length > longest) longest = line.length;
+      for (const line of lines) {
+        if (line.length > longest) longest = line.length;
       }
     }
     return longest;
   }
 
-  function getAvailableWidth(el){
-    const parent = el.parentElement;
-    if(!parent) return 0;
-    const style = getComputedStyle(el);
+  function getAvailableWidth(terminalElement) {
+    const parent = terminalElement.parentElement;
+    if (!parent) return 0;
+
+    const style = getComputedStyle(terminalElement);
     const paddingLeft = parseFloat(style.paddingLeft) || 0;
     const paddingRight = parseFloat(style.paddingRight) || 0;
     return Math.max(0, parent.clientWidth - paddingLeft - paddingRight);
   }
 
-  function measureCharacterWidth(el, fontSize){
-    if(!measurementContext) return fontSize * 0.6;
-    const style = getComputedStyle(el);
+  function measureCharacterWidth(terminalElement, fontSize) {
+    if (!measurementContext) return fontSize * 0.6;
+
+    const style = getComputedStyle(terminalElement);
     measurementContext.font = `${style.fontStyle} ${style.fontWeight} ${fontSize}px ${style.fontFamily}`;
     const sample = '00000000000000000000';
     return measurementContext.measureText(sample).width / sample.length || fontSize * 0.6;
   }
 
-  function apply(el){
-    const availableWidth = getAvailableWidth(el);
-    if(!availableWidth) return;
+  function apply(terminalElement) {
+    const availableWidth = getAvailableWidth(terminalElement);
+    if (!availableWidth) return;
 
-    const longestLineLength = Math.max(1, getLongestLineLength(el));
-    const baseCharacterWidth = measureCharacterWidth(el, BASE_FONT_SIZE);
+    const longestLineLength = Math.max(1, getLongestLineLength(terminalElement));
+    const baseCharacterWidth = measureCharacterWidth(terminalElement, BASE_FONT_SIZE);
     const idealFontSize = availableWidth / (longestLineLength * (baseCharacterWidth / BASE_FONT_SIZE));
     const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, Math.floor(idealFontSize)));
     const widthAtFontSize = longestLineLength * baseCharacterWidth * (fontSize / BASE_FONT_SIZE);
     const scale = widthAtFontSize > availableWidth ? availableWidth / widthAtFontSize : 1;
 
-    el.style.setProperty('--terminal-font-size', `${fontSize}px`);
-    el.style.setProperty('--terminal-scale', String(Math.min(1, scale)));
+    terminalElement.style.setProperty('--terminal-font-size', `${fontSize}px`);
+    terminalElement.style.setProperty('--terminal-scale', String(Math.min(1, scale)));
   }
 
-  function schedule(el){
-    if(frameId) cancelAnimationFrame(frameId);
-    frameId = requestAnimationFrame(()=>{
+  function schedule(terminalElement) {
+    if (frameId) cancelAnimationFrame(frameId);
+
+    frameId = requestAnimationFrame(() => {
       frameId = 0;
-      apply(el);
+      apply(terminalElement);
     });
   }
 
@@ -82,38 +97,94 @@ const TerminalFit = (()=>{
 })();
 
 /* ====== ANSI PARSER ====== */
-const Ansi=(()=>{
-  const FG={30:'#6e7681',31:'#ff5c57',32:'#5af78e',33:'#f3f99d',34:'#57c7ff',35:'#c792ea',36:'#9aedfe',37:'#f0f6fc',
-    90:'#5a6270',91:'#ff8a85',92:'#7bebb2',93:'#e3c97a',94:'#7bc4ff',95:'#d2a8ff',96:'#79e3f5',97:'#f0f6fc'};
-  function toHtml(str){
-    if(!str)return'';let o='',fg='',bold=false,rev=false,i=0;
-    while(i<str.length){
-      if(str[i]==='\x1b'&&str[i+1]==='['){
-        let j=i+2,code='';
-        while(j<str.length&&!(/[A-Za-z]/).test(str[j])){code+=str[j];j++}
-        if(str[j]==='m'){
-          const codes=code.split(';').map(Number);
-          for(const c of codes){
-            if(c===0){if(fg||bold||rev)o+='</span>';fg='';bold=false;rev=false}
-            else if(c===1){if(fg||bold||rev)o+='</span>';bold=true;o+=sp(fg,bold,rev)}
-            else if(c===7){if(fg||bold||rev)o+='</span>';rev=true;o+=sp(fg,bold,rev)}
-            else if((c>=30&&c<=37)||(c>=90&&c<=97)){if(fg||bold||rev)o+='</span>';fg=FG[c]||'';o+=sp(fg,bold,rev)}
+const Ansi = (() => {
+  const FG = {
+    30: '#6e7681',
+    31: '#ff5c57',
+    32: '#5af78e',
+    33: '#f3f99d',
+    34: '#57c7ff',
+    35: '#c792ea',
+    36: '#9aedfe',
+    37: '#f0f6fc',
+    90: '#5a6270',
+    91: '#ff8a85',
+    92: '#7bebb2',
+    93: '#e3c97a',
+    94: '#7bc4ff',
+    95: '#d2a8ff',
+    96: '#79e3f5',
+    97: '#f0f6fc',
+  };
+
+  function toHtml(input) {
+    if (!input) return '';
+
+    let output = '';
+    let currentColor = '';
+    let isBold = false;
+    let isReverse = false;
+    let i = 0;
+
+    while (i < input.length) {
+      if (input[i] === '\x1b' && input[i + 1] === '[') {
+        let j = i + 2;
+        let code = '';
+        while (j < input.length && !(/[A-Za-z]/).test(input[j])) {
+          code += input[j];
+          j++;
+        }
+
+        if (input[j] === 'm') {
+          const codes = code.split(';').map(Number);
+          for (const ansiCode of codes) {
+            if (ansiCode === 0) {
+              if (currentColor || isBold || isReverse) output += '</span>';
+              currentColor = '';
+              isBold = false;
+              isReverse = false;
+            } else if (ansiCode === 1) {
+              if (currentColor || isBold || isReverse) output += '</span>';
+              isBold = true;
+              output += buildSpan(currentColor, isBold, isReverse);
+            } else if (ansiCode === 7) {
+              if (currentColor || isBold || isReverse) output += '</span>';
+              isReverse = true;
+              output += buildSpan(currentColor, isBold, isReverse);
+            } else if ((ansiCode >= 30 && ansiCode <= 37) || (ansiCode >= 90 && ansiCode <= 97)) {
+              if (currentColor || isBold || isReverse) output += '</span>';
+              currentColor = FG[ansiCode] || '';
+              output += buildSpan(currentColor, isBold, isReverse);
+            }
           }
         }
-        i=j+1;continue;
+
+        i = j + 1;
+        continue;
       }
-      if(str[i]==='<')o+='&lt;';else if(str[i]==='>')o+='&gt;';else if(str[i]==='&')o+='&amp;';else o+=str[i];
+
+      if (input[i] === '<') output += '&lt;';
+      else if (input[i] === '>') output += '&gt;';
+      else if (input[i] === '&') output += '&amp;';
+      else output += input[i];
+
       i++;
     }
-    if(fg||bold||rev)o+='</span>';return o;
+
+    if (currentColor || isBold || isReverse) output += '</span>';
+    return output;
   }
-  function sp(fg,bold,rev){
-    let s='<span style="';
-    if(rev)s+='background:var(--text-primary);color:var(--bg-terminal);';else if(fg)s+='color:'+fg+';';
-    if(bold)s+='font-weight:700;';
-    return s+'">';
+
+  function buildSpan(color, bold, reverse) {
+    let style = '<span style="';
+    if (reverse) style += 'background:var(--text-primary);color:var(--bg-terminal);';
+    else if (color) style += `color:${color};`;
+
+    if (bold) style += 'font-weight:700;';
+    return `${style}">`;
   }
-  return{toHtml};
+
+  return { toHtml };
 })();
 
 /* ====== VFS ====== */
@@ -410,72 +481,128 @@ function initFS(){
 }
 
 /* ====== TERMINAL UI ====== */
-(function boot(){
+(function boot() {
   initFS();
-  const el=document.getElementById('terminal');
-  const st={cwd:'/home/user',history:[],historyIdx:-1,input:'',cursor:0,saved:''};
-  const scheduleTerminalFit = ()=>TerminalFit.schedule(el);
+  const terminalElement = document.getElementById('terminal');
+  const terminalState = {
+    cwd: '/home/user',
+    history: [],
+    historyIdx: -1,
+    input: '',
+    cursor: 0,
+    saved: '',
+  };
+  const scheduleTerminalFit = () => TerminalFit.schedule(terminalElement);
 
-  if(document.fonts && document.fonts.ready){
+  if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(scheduleTerminalFit);
   }
 
-  if('ResizeObserver' in window){
-    const resizeObserver = new ResizeObserver(()=>scheduleTerminalFit());
-    if(el.parentElement) resizeObserver.observe(el.parentElement);
+  if ('ResizeObserver' in window) {
+    const resizeObserver = new ResizeObserver(() => scheduleTerminalFit());
+    if (terminalElement.parentElement) resizeObserver.observe(terminalElement.parentElement);
   }
 
-  const mutationObserver = new MutationObserver(()=>scheduleTerminalFit());
-  mutationObserver.observe(el,{childList:true,subtree:true,characterData:true});
+  // Re-fit when output changes so long lines stay visible without clipping.
+  const mutationObserver = new MutationObserver(() => scheduleTerminalFit());
+  mutationObserver.observe(terminalElement, { childList: true, subtree: true, characterData: true });
 
-  window.addEventListener('resize', scheduleTerminalFit, {passive:true});
-  window.addEventListener('orientationchange', scheduleTerminalFit, {passive:true});
+  window.addEventListener('resize', scheduleTerminalFit, { passive: true });
+  window.addEventListener('orientationchange', scheduleTerminalFit, { passive: true });
 
-  function promptH(){
-    let dp=st.cwd;
-    if(dp.startsWith('/home/user'))dp='~'+dp.slice(10);
-    if(!dp)dp='~';
-    return`<span class="prompt-user">user</span><span class="prompt-host">@weblinux</span><span class="prompt-sym">:</span><span class="prompt-path">${dp}</span><span class="prompt-dollar">$ </span>`;
+  function buildPromptHtml() {
+    let displayPath = terminalState.cwd;
+    if (displayPath.startsWith('/home/user')) displayPath = `~${displayPath.slice(10)}`;
+    if (!displayPath) displayPath = '~';
+
+    return `<span class="prompt-user">user</span><span class="prompt-host">@weblinux</span><span class="prompt-sym">:</span><span class="prompt-path">${displayPath}</span><span class="prompt-dollar">$ </span>`;
   }
 
-  function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+  function escapeHtml(value) {
+    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
 
-  function renderInput(){
-    let il=document.getElementById('il');
-    if(!il){il=document.createElement('div');il.id='il';il.style.display='inline';el.appendChild(il)}
-    const b=esc(st.input.slice(0,st.cursor));
-    const cc=st.cursor<st.input.length?esc(st.input[st.cursor]):' ';
-    const a=st.cursor<st.input.length?esc(st.input.slice(st.cursor+1)):'';
-    il.innerHTML=promptH()+b+'<span class="cursor-char cursor-blink">'+cc+'</span>'+a;
+  function renderInput() {
+    let inputLineElement = document.getElementById('il');
+    if (!inputLineElement) {
+      inputLineElement = document.createElement('div');
+      inputLineElement.id = 'il';
+      inputLineElement.style.display = 'inline';
+      terminalElement.appendChild(inputLineElement);
+    }
+
+    const beforeCursor = escapeHtml(terminalState.input.slice(0, terminalState.cursor));
+    const cursorCharacter = terminalState.cursor < terminalState.input.length
+      ? escapeHtml(terminalState.input[terminalState.cursor])
+      : ' ';
+    const afterCursor = terminalState.cursor < terminalState.input.length
+      ? escapeHtml(terminalState.input.slice(terminalState.cursor + 1))
+      : '';
+
+    inputLineElement.innerHTML = buildPromptHtml() + beforeCursor + '<span class="cursor-char cursor-blink">' + cursorCharacter + '</span>' + afterCursor;
     scheduleTerminalFit();
   }
 
-  function wl(html){const d=document.createElement('div');d.className='output-line';d.innerHTML=html;el.appendChild(d);scheduleTerminalFit()}
-  function writeOut(text){if(!text)return;const h=Ansi.toHtml(text);h.split('\n').forEach(l=>wl(l||' '))}
-  function removeIL(){const il=document.getElementById('il');if(il)il.remove()}
-  function scroll(){el.scrollTop=el.scrollHeight}
-
-  function submit(){
-    const input=st.input;removeIL();wl(promptH()+esc(input));st.input='';st.cursor=0;
-    const tr=input.trim();
-    if(tr){st.history.push(tr);st.historyIdx=st.history.length;const r=Pipe.execute(tr,st);if(r==='\x1b[CLEAR]')el.innerHTML='';else if(r)writeOut(r)}
-    renderInput();scroll();
+  function writeLine(html) {
+    const lineElement = document.createElement('div');
+    lineElement.className = 'output-line';
+    lineElement.innerHTML = html;
+    terminalElement.appendChild(lineElement);
+    scheduleTerminalFit();
   }
 
-  function insertChars(text){
-    if(!text)return;
-    st.input=st.input.slice(0,st.cursor)+text+st.input.slice(st.cursor);
-    st.cursor+=text.length;
-    renderInput();
-    scroll();
+  function writeOutput(text) {
+    if (!text) return;
+    const html = Ansi.toHtml(text);
+    html.split('\n').forEach((line) => writeLine(line || ' '));
   }
 
-  function backspaceOnce(){
-    if(st.cursor<=0)return;
-    st.input=st.input.slice(0,st.cursor-1)+st.input.slice(st.cursor);
-    st.cursor--;
+  function removeInputLine() {
+    const inputLineElement = document.getElementById('il');
+    if (inputLineElement) inputLineElement.remove();
+  }
+
+  function scrollToBottom() {
+    terminalElement.scrollTop = terminalElement.scrollHeight;
+  }
+
+  function submitInput() {
+    const input = terminalState.input;
+    removeInputLine();
+    writeLine(buildPromptHtml() + escapeHtml(input));
+
+    terminalState.input = '';
+    terminalState.cursor = 0;
+
+    const trimmedInput = input.trim();
+    if (trimmedInput) {
+      terminalState.history.push(trimmedInput);
+      terminalState.historyIdx = terminalState.history.length;
+      const commandResult = Pipe.execute(trimmedInput, terminalState);
+      if (commandResult === '\x1b[CLEAR]') terminalElement.innerHTML = '';
+      else if (commandResult) writeOutput(commandResult);
+    }
+
     renderInput();
-    scroll();
+    scrollToBottom();
+  }
+
+  function insertChars(text) {
+    if (!text) return;
+
+    terminalState.input = terminalState.input.slice(0, terminalState.cursor) + text + terminalState.input.slice(terminalState.cursor);
+    terminalState.cursor += text.length;
+    renderInput();
+    scrollToBottom();
+  }
+
+  function backspaceOnce() {
+    if (terminalState.cursor <= 0) return;
+
+    terminalState.input = terminalState.input.slice(0, terminalState.cursor - 1) + terminalState.input.slice(terminalState.cursor);
+    terminalState.cursor--;
+    renderInput();
+    scrollToBottom();
   }
 
   /* Boot sequence - typewriter style */
@@ -493,62 +620,234 @@ function initFS(){
   ];
 
   let bootIdx = 0;
-  function bootStep(){
-    if(bootIdx < bootLines.length){
-      writeOut(bootLines[bootIdx]);
+  function bootStep() {
+    if (bootIdx < bootLines.length) {
+      writeOutput(bootLines[bootIdx]);
       bootIdx++;
       const delay = 15;
       setTimeout(bootStep, delay);
     } else {
       renderInput();
-      scroll();
+      scrollToBottom();
     }
   }
   bootStep();
 
   /* Tab */
-  function handleTab(){
-    const parts=st.input.split(/\s+/);
-    if(parts.length<=1){const partial=parts[0]||'';const m=Object.keys(C).filter(c=>c.startsWith(partial));if(m.length===1){st.input=m[0]+' ';st.cursor=st.input.length;renderInput()}else if(m.length>1){removeIL();wl(promptH()+esc(st.input));wl(m.join('  '));renderInput()}}
-    else{const partial=parts[parts.length-1];const comps=VFS.completions(partial,st.cwd);if(comps.length===1){parts[parts.length-1]=comps[0];st.input=parts.join(' ');st.cursor=st.input.length;renderInput()}else if(comps.length>1){let common=comps[0];for(let i=1;i<comps.length;i++){while(!comps[i].startsWith(common))common=common.slice(0,-1)}if(common.length>partial.length){parts[parts.length-1]=common;st.input=parts.join(' ');st.cursor=st.input.length;renderInput()}else{removeIL();wl(promptH()+esc(st.input));wl(comps.join('  '));renderInput()}}}scroll()
+  function handleTab() {
+    const inputParts = terminalState.input.split(/\s+/);
+
+    if (inputParts.length <= 1) {
+      const commandPartial = inputParts[0] || '';
+      const matchingCommands = Object.keys(C).filter((commandName) => commandName.startsWith(commandPartial));
+
+      if (matchingCommands.length === 1) {
+        terminalState.input = `${matchingCommands[0]} `;
+        terminalState.cursor = terminalState.input.length;
+        renderInput();
+      } else if (matchingCommands.length > 1) {
+        removeInputLine();
+        writeLine(buildPromptHtml() + escapeHtml(terminalState.input));
+        writeLine(matchingCommands.join('  '));
+        renderInput();
+      }
+    } else {
+      const pathPartial = inputParts[inputParts.length - 1];
+      const completions = VFS.completions(pathPartial, terminalState.cwd);
+
+      if (completions.length === 1) {
+        inputParts[inputParts.length - 1] = completions[0];
+        terminalState.input = inputParts.join(' ');
+        terminalState.cursor = terminalState.input.length;
+        renderInput();
+      } else if (completions.length > 1) {
+        let commonPrefix = completions[0];
+        for (let i = 1; i < completions.length; i++) {
+          while (!completions[i].startsWith(commonPrefix)) commonPrefix = commonPrefix.slice(0, -1);
+        }
+
+        if (commonPrefix.length > pathPartial.length) {
+          inputParts[inputParts.length - 1] = commonPrefix;
+          terminalState.input = inputParts.join(' ');
+          terminalState.cursor = terminalState.input.length;
+          renderInput();
+        } else {
+          removeInputLine();
+          writeLine(buildPromptHtml() + escapeHtml(terminalState.input));
+          writeLine(completions.join('  '));
+          renderInput();
+        }
+      }
+    }
+
+    scrollToBottom();
   }
 
-  function handleKey(key,meta={}){
-    const ctrl=!!meta.ctrlKey;
-    const alt=!!meta.altKey;
-    const shift=!!meta.shiftKey;
-    const m=!!meta.metaKey;
+  function handleKey(key, metadata = {}) {
+    const isCtrlPressed = !!metadata.ctrlKey;
+    const isAltPressed = !!metadata.altKey;
+    const isShiftPressed = !!metadata.shiftKey;
+    const isMetaPressed = !!metadata.metaKey;
 
-    if(ctrl&&key==='c'){removeIL();wl(promptH()+esc(st.input)+'^C');st.input='';st.cursor=0;renderInput();scroll();return true}
-    if(ctrl&&key==='l'){el.innerHTML='';renderInput();scroll();return true}
-    if(ctrl&&key==='a'){st.cursor=0;renderInput();return true}
-    if(ctrl&&key==='e'){st.cursor=st.input.length;renderInput();return true}
-    if(ctrl&&key==='u'){st.input=st.input.slice(st.cursor);st.cursor=0;renderInput();return true}
-    if(ctrl&&key==='k'){st.input=st.input.slice(0,st.cursor);renderInput();return true}
-    if(ctrl&&key==='w'){const b=st.input.slice(0,st.cursor);const a=st.input.slice(st.cursor);const t=b.trimEnd();const ls=t.lastIndexOf(' ');const nb=ls===-1?'':t.slice(0,ls+1);st.input=nb+a;st.cursor=nb.length;renderInput();return true}
-    if(key==='Tab'){handleTab();return true}
-    if(key==='Enter'){submit();return true}
-    if(key==='Backspace'){backspaceOnce();return true}
-    if(key==='Delete'){if(st.cursor<st.input.length){st.input=st.input.slice(0,st.cursor)+st.input.slice(st.cursor+1);renderInput()}return true}
-    if(key==='ArrowUp'){if(st.historyIdx===st.history.length)st.saved=st.input;if(st.historyIdx>0){st.historyIdx--;st.input=st.history[st.historyIdx];st.cursor=st.input.length;renderInput();scroll()}return true}
-    if(key==='ArrowDown'){if(st.historyIdx<st.history.length){st.historyIdx++;st.input=st.historyIdx===st.history.length?st.saved:st.history[st.historyIdx];st.cursor=st.input.length;renderInput();scroll()}return true}
-    if(key==='ArrowLeft'){if(st.cursor>0){st.cursor--;renderInput()}return true}
-    if(key==='ArrowRight'){if(st.cursor<st.input.length){st.cursor++;renderInput()}return true}
-    if(key==='Home'){st.cursor=0;renderInput();return true}
-    if(key==='End'){st.cursor=st.input.length;renderInput();return true}
-    if(key===' '){insertChars(' ');return true}
-    if(key.length===1&&!ctrl&&!alt&&!m){insertChars(key);return true}
-    if(key.length===1&&shift&&!ctrl&&!alt&&!m){insertChars(key);return true}
+    if (isCtrlPressed && key === 'c') {
+      removeInputLine();
+      writeLine(buildPromptHtml() + escapeHtml(terminalState.input) + '^C');
+      terminalState.input = '';
+      terminalState.cursor = 0;
+      renderInput();
+      scrollToBottom();
+      return true;
+    }
+
+    if (isCtrlPressed && key === 'l') {
+      terminalElement.innerHTML = '';
+      renderInput();
+      scrollToBottom();
+      return true;
+    }
+
+    if (isCtrlPressed && key === 'a') {
+      terminalState.cursor = 0;
+      renderInput();
+      return true;
+    }
+
+    if (isCtrlPressed && key === 'e') {
+      terminalState.cursor = terminalState.input.length;
+      renderInput();
+      return true;
+    }
+
+    if (isCtrlPressed && key === 'u') {
+      terminalState.input = terminalState.input.slice(terminalState.cursor);
+      terminalState.cursor = 0;
+      renderInput();
+      return true;
+    }
+
+    if (isCtrlPressed && key === 'k') {
+      terminalState.input = terminalState.input.slice(0, terminalState.cursor);
+      renderInput();
+      return true;
+    }
+
+    if (isCtrlPressed && key === 'w') {
+      const beforeCursor = terminalState.input.slice(0, terminalState.cursor);
+      const afterCursor = terminalState.input.slice(terminalState.cursor);
+      const trimmedBeforeCursor = beforeCursor.trimEnd();
+      const lastSpaceIndex = trimmedBeforeCursor.lastIndexOf(' ');
+      const newBeforeCursor = lastSpaceIndex === -1 ? '' : trimmedBeforeCursor.slice(0, lastSpaceIndex + 1);
+      terminalState.input = newBeforeCursor + afterCursor;
+      terminalState.cursor = newBeforeCursor.length;
+      renderInput();
+      return true;
+    }
+
+    if (key === 'Tab') {
+      handleTab();
+      return true;
+    }
+
+    if (key === 'Enter') {
+      submitInput();
+      return true;
+    }
+
+    if (key === 'Backspace') {
+      backspaceOnce();
+      return true;
+    }
+
+    if (key === 'Delete') {
+      if (terminalState.cursor < terminalState.input.length) {
+        terminalState.input = terminalState.input.slice(0, terminalState.cursor) + terminalState.input.slice(terminalState.cursor + 1);
+        renderInput();
+      }
+      return true;
+    }
+
+    if (key === 'ArrowUp') {
+      if (terminalState.historyIdx === terminalState.history.length) terminalState.saved = terminalState.input;
+      if (terminalState.historyIdx > 0) {
+        terminalState.historyIdx--;
+        terminalState.input = terminalState.history[terminalState.historyIdx];
+        terminalState.cursor = terminalState.input.length;
+        renderInput();
+        scrollToBottom();
+      }
+      return true;
+    }
+
+    if (key === 'ArrowDown') {
+      if (terminalState.historyIdx < terminalState.history.length) {
+        terminalState.historyIdx++;
+        terminalState.input = terminalState.historyIdx === terminalState.history.length
+          ? terminalState.saved
+          : terminalState.history[terminalState.historyIdx];
+        terminalState.cursor = terminalState.input.length;
+        renderInput();
+        scrollToBottom();
+      }
+      return true;
+    }
+
+    if (key === 'ArrowLeft') {
+      if (terminalState.cursor > 0) {
+        terminalState.cursor--;
+        renderInput();
+      }
+      return true;
+    }
+
+    if (key === 'ArrowRight') {
+      if (terminalState.cursor < terminalState.input.length) {
+        terminalState.cursor++;
+        renderInput();
+      }
+      return true;
+    }
+
+    if (key === 'Home') {
+      terminalState.cursor = 0;
+      renderInput();
+      return true;
+    }
+
+    if (key === 'End') {
+      terminalState.cursor = terminalState.input.length;
+      renderInput();
+      return true;
+    }
+
+    if (key === ' ') {
+      insertChars(' ');
+      return true;
+    }
+
+    if (key.length === 1 && !isCtrlPressed && !isAltPressed && !isMetaPressed) {
+      insertChars(key);
+      return true;
+    }
+
+    if (key.length === 1 && isShiftPressed && !isCtrlPressed && !isAltPressed && !isMetaPressed) {
+      insertChars(key);
+      return true;
+    }
+
     return false;
   }
 
-  window.handleKey=handleKey;
+  window.handleKey = handleKey;
 
   /* Keys */
-  document.addEventListener('keydown',function(ev){
-    const target=ev.target;
-    if(target&&target.closest&&target.closest('.on-screen-keyboard'))return;
-    if(handleKey(ev.key,ev))ev.preventDefault();
+  document.addEventListener('keydown', function (event) {
+    const target = event.target;
+    if (target && target.closest && target.closest('.on-screen-keyboard')) return;
+    if (handleKey(event.key, event)) event.preventDefault();
   });
-  document.addEventListener('paste',function(ev){ev.preventDefault();const t=(ev.clipboardData||window.clipboardData).getData('text').replace(/[\r\n]+/g,'');insertChars(t)});
+  document.addEventListener('paste', function (event) {
+    event.preventDefault();
+    const pastedText = (event.clipboardData || window.clipboardData).getData('text').replace(/[\r\n]+/g, '');
+    insertChars(pastedText);
+  });
 })();
