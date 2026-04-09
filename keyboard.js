@@ -9,7 +9,10 @@
   const keyboardElement = document.createElement("div");
   keyboardElement.className = "on-screen-keyboard";
 
-  const utilityRowKeys = ["Escape", "/", "-", "Home", "ArrowUp", "End", "PageUp", "Control", "Alt", "ArrowLeft", "ArrowDown", "ArrowRight"];
+  const utilityRowKeyRows = [
+    ["Escape", "/", "-", "Home", "ArrowUp", "End"],
+    ["PageUp", "Control", "Alt", "ArrowLeft", "ArrowDown", "ArrowRight"]
+  ];
   const mainKeyRows = [
     ["1","2","3","4","5","6","7","8","9","0"],
     ["q","w","e","r","t","y","u","i","o","p"],
@@ -122,7 +125,7 @@
     event.preventDefault();
   }, { passive: false });
 
-  buildRow(utilityRowKeys, "on-screen-keyboard-utility-row");
+  for(const rowKeys of utilityRowKeyRows) buildRow(rowKeys, "on-screen-keyboard-utility-row");
   for(const rowKeys of mainKeyRows) buildRow(rowKeys, "on-screen-keyboard-main-row");
 
   document.body.appendChild(keyboardElement);
