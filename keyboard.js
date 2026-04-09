@@ -1,16 +1,16 @@
 "use strict";
 
 (function initOnScreenKeyboard(){
-  const isMobile = window.matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  if(!isMobile) return;
+  const isLikelyTouchDevice = window.matchMedia("(pointer: coarse)").matches || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if(!isLikelyTouchDevice) return;
 
   document.body.classList.add("mobile-keyboard-active");
 
-  const keyboard = document.createElement("div");
-  keyboard.className = "on-screen-keyboard";
+  const keyboardElement = document.createElement("div");
+  keyboardElement.className = "on-screen-keyboard";
 
-  const utilityLayout = ["Escape", "/", "-", "Home", "ArrowUp", "End", "PageUp", "Control", "Alt", "ArrowLeft", "ArrowDown", "ArrowRight"];
-  const layout = [
+  const utilityRowKeys = ["Escape", "/", "-", "Home", "ArrowUp", "End", "PageUp", "Control", "Alt", "ArrowLeft", "ArrowDown", "ArrowRight"];
+  const mainKeyRows = [
     ["1","2","3","4","5","6","7","8","9","0"],
     ["q","w","e","r","t","y","u","i","o","p"],
     ["a","s","d","f","g","h","j","k","l","⌫"],
@@ -32,97 +32,98 @@
   let shiftEnabled = false;
   let lastTouchAt = 0;
 
-  function sendKey(key){
+  function sendKeyToTerminal(key){
     if(typeof window.handleKey !== "function") return;
-    const mapped = key === "Space" ? " " : key;
-    window.handleKey(mapped, {});
+    const mappedKey = key === "Space" ? " " : key;
+    window.handleKey(mappedKey, {});
   }
 
-  function isLetter(key){
+  function isAlphabeticKey(key){
     return /^[a-z]$/i.test(key);
   }
 
-  function normalizeKey(key){
+  function normalizeKeyLabel(key){
     if(key === "⌫") return "Backspace";
     if(key === "↵") return "Enter";
     if(key === "⇧") return "Shift";
     return key;
   }
 
-  function resolveKeyPress(key){
-    const normalized = normalizeKey(key);
-    if(normalized === "Shift") return null;
-    if(shiftEnabled && isLetter(normalized)) return normalized.toUpperCase();
-    return normalized;
+  function resolveKeyValue(key){
+    const normalizedKey = normalizeKeyLabel(key);
+    if(normalizedKey === "Shift") return null;
+    if(shiftEnabled && isAlphabeticKey(normalizedKey)) return normalizedKey.toUpperCase();
+    return normalizedKey;
   }
 
-  function keyLabel(key){
-    const normalized = normalizeKey(key);
-    if(normalized === "Space") return "space";
-    if(symbolMap[normalized]) return symbolMap[normalized];
-    if(shiftEnabled && isLetter(normalized)) return normalized.toUpperCase();
+  function getKeyLabel(key){
+    const normalizedKey = normalizeKeyLabel(key);
+    if(normalizedKey === "Space") return "space";
+    if(symbolMap[normalizedKey]) return symbolMap[normalizedKey];
+    if(shiftEnabled && isAlphabeticKey(normalizedKey)) return normalizedKey.toUpperCase();
     return key;
   }
 
   function buildRow(rowKeys, rowClass){
-    const row = document.createElement("div");
-    row.className = `on-screen-keyboard-row ${rowClass}`;
+    const rowElement = document.createElement("div");
+    rowElement.className = `on-screen-keyboard-row ${rowClass}`;
 
     for(const key of rowKeys){
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.key = key;
-      button.textContent = keyLabel(key);
+      const keyButton = document.createElement("button");
+      keyButton.type = "button";
+      keyButton.dataset.key = key;
+      keyButton.textContent = getKeyLabel(key);
 
-      const normalized = normalizeKey(key);
+      const normalizedKey = normalizeKeyLabel(key);
 
-      if(normalized === "Backspace" || normalized === "Enter" || normalized === "Tab" || normalized === "Shift") button.classList.add("key-wide");
-      if(normalized === "Space") button.classList.add("key-space");
-      if(rowClass === "on-screen-keyboard-utility-row") button.classList.add("key-action");
-      if(normalized === "Backspace" || normalized === "Enter" || normalized === "Shift") button.classList.add("key-action");
+      if(normalizedKey === "Backspace" || normalizedKey === "Enter" || normalizedKey === "Tab" || normalizedKey === "Shift") keyButton.classList.add("key-wide");
+      if(normalizedKey === "Space") keyButton.classList.add("key-space");
+      if(rowClass === "on-screen-keyboard-utility-row") keyButton.classList.add("key-action");
+      if(normalizedKey === "Backspace" || normalizedKey === "Enter" || normalizedKey === "Shift") keyButton.classList.add("key-action");
 
-      const press = (ev)=>{
-        ev.preventDefault();
+      const onPress = (event)=>{
+        event.preventDefault();
 
-        if(ev.type === "click" && Date.now() - lastTouchAt < 300) return;
-        if(ev.type === "touchstart") lastTouchAt = Date.now();
+        if(event.type === "click" && Date.now() - lastTouchAt < 300) return;
+        if(event.type === "touchstart") lastTouchAt = Date.now();
 
-        if(normalized === "Shift"){
+        if(normalizedKey === "Shift"){
           shiftEnabled = !shiftEnabled;
-          keyboard.classList.toggle("shift-active", shiftEnabled);
-          refreshLabels();
+          keyboardElement.classList.toggle("shift-active", shiftEnabled);
+          refreshKeyLabels();
           return;
         }
 
-        const resolved = resolveKeyPress(key);
-        if(resolved) sendKey(resolved);
+        const resolvedKey = resolveKeyValue(key);
+        if(resolvedKey) sendKeyToTerminal(resolvedKey);
       };
 
-      button.addEventListener("click", press);
-      button.addEventListener("touchstart", press, { passive: false });
-      row.appendChild(button);
+      keyButton.addEventListener("click", onPress);
+      keyButton.addEventListener("touchstart", onPress, { passive: false });
+      rowElement.appendChild(keyButton);
     }
 
-    keyboard.appendChild(row);
+    keyboardElement.appendChild(rowElement);
   }
 
-  function refreshLabels(){
-    const keys = keyboard.querySelectorAll("button[data-key]");
-    for(const button of keys){
+  function refreshKeyLabels(){
+    const keyButtons = keyboardElement.querySelectorAll("button[data-key]");
+    for(const button of keyButtons){
       const key = button.dataset.key;
       if(!key) continue;
-      const normalized = normalizeKey(key);
-      button.textContent = keyLabel(key);
-      if(normalized === "Shift") button.classList.toggle("key-toggled", shiftEnabled);
+      const normalizedKey = normalizeKeyLabel(key);
+      button.textContent = getKeyLabel(key);
+      if(normalizedKey === "Shift") button.classList.toggle("key-toggled", shiftEnabled);
     }
   }
 
-  keyboard.addEventListener("touchmove", (ev)=>{
-    ev.preventDefault();
+  // Prevent page scrolling while swiping on the keyboard area.
+  keyboardElement.addEventListener("touchmove", (event)=>{
+    event.preventDefault();
   }, { passive: false });
 
-  buildRow(utilityLayout, "on-screen-keyboard-utility-row");
-  for(const rowKeys of layout) buildRow(rowKeys, "on-screen-keyboard-main-row");
+  buildRow(utilityRowKeys, "on-screen-keyboard-utility-row");
+  for(const rowKeys of mainKeyRows) buildRow(rowKeys, "on-screen-keyboard-main-row");
 
-  document.body.appendChild(keyboard);
+  document.body.appendChild(keyboardElement);
 })();
