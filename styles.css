@@ -23,10 +23,16 @@
   --sidebar-border: #1e1e1e;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; }
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
 
-html, body {
-  width: 100%; height: 100%;
+html,
+body {
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: var(--bg-deep);
   font-family: 'JetBrains Mono', 'IBM Plex Mono', 'Courier New', monospace;
@@ -97,9 +103,17 @@ html, body {
   position: relative;
 }
 
-.title-bar-btn.close { background: var(--red); }
-.title-bar-btn.minimize { background: var(--orange); }
-.title-bar-btn.maximize { background: var(--green); }
+.title-bar-btn.close {
+  background: var(--red);
+}
+
+.title-bar-btn.minimize {
+  background: var(--orange);
+}
+
+.title-bar-btn.maximize {
+  background: var(--green);
+}
 
 .title-bar-btn::after {
   content: '';
@@ -205,10 +219,22 @@ html, body {
 
 /* Flicker animation */
 @keyframes flicker {
-  0%, 100% { opacity: 1; }
-  92% { opacity: 1; }
-  93% { opacity: 0.97; }
-  94% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  92% {
+    opacity: 1;
+  }
+
+  93% {
+    opacity: 0.97;
+  }
+
+  94% {
+    opacity: 1;
+  }
 }
 
 #terminal {
@@ -253,20 +279,47 @@ html, body {
   font-kerning: none;
 }
 
-#terminal::-webkit-scrollbar { width: 6px; }
+#terminal::-webkit-scrollbar {
+  width: 6px;
+}
 #terminal::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,0.08);
   border-radius: 3px;
 }
-#terminal::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
-#terminal::-webkit-scrollbar-track { background: transparent; }
+#terminal::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,0.14);
+}
+
+#terminal::-webkit-scrollbar-track {
+  background: transparent;
+}
 
 /* Prompt styling */
-.prompt-user { color: var(--green); font-weight: 700; text-shadow: 0 0 6px rgba(90, 247, 142, 0.2); }
-.prompt-host { color: var(--green-dim); font-weight: 400; }
-.prompt-path { color: var(--blue); font-weight: 700; text-shadow: 0 0 6px rgba(87, 199, 255, 0.15); }
-.prompt-sym { color: var(--text-dim); }
-.prompt-dollar { color: var(--text-bright); font-weight: 700; }
+.prompt-user {
+  color: var(--green);
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(90, 247, 142, 0.2);
+}
+
+.prompt-host {
+  color: var(--green-dim);
+  font-weight: 400;
+}
+
+.prompt-path {
+  color: var(--blue);
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(87, 199, 255, 0.15);
+}
+
+.prompt-sym {
+  color: var(--text-dim);
+}
+
+.prompt-dollar {
+  color: var(--text-bright);
+  font-weight: 700;
+}
 
 /* Cursor */
 .cursor-char {
@@ -279,8 +332,16 @@ html, body {
 }
 
 @keyframes blink {
-  0%, 100% { background: var(--text-primary); color: var(--bg-terminal); }
-  50% { background: transparent; color: var(--text-primary); }
+  0%,
+  100% {
+    background: var(--text-primary);
+    color: var(--bg-terminal);
+  }
+
+  50% {
+    background: transparent;
+    color: var(--text-primary);
+  }
 }
 
 .output-line {
@@ -304,7 +365,8 @@ html, body {
   user-select: none;
 }
 
-.status-bar-left, .status-bar-right {
+.status-bar-left,
+.status-bar-right {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -355,11 +417,21 @@ html, body {
   flex-shrink: 0;
 }
 
-.ad-placeholder.tall { height: 600px; }
-.ad-placeholder.medium { height: 250px; }
-.ad-placeholder.banner { height: 100px; }
+.ad-placeholder.tall {
+  height: 600px;
+}
 
-.sidebar-ad::-webkit-scrollbar { width: 0; }
+.ad-placeholder.medium {
+  height: 250px;
+}
+
+.ad-placeholder.banner {
+  height: 100px;
+}
+
+.sidebar-ad::-webkit-scrollbar {
+  width: 0;
+}
 
 .on-screen-keyboard {
   position: fixed;
@@ -447,19 +519,34 @@ body.mobile-keyboard-active .window-frame {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 1024px) {
-  .sidebar-ad { width: 200px; min-width: 200px; max-width: 200px; }
+  .sidebar-ad {
+    width: 200px;
+    min-width: 200px;
+    max-width: 200px;
+  }
 }
 
 @media (max-width: 768px) {
-  .sidebar-ad { display: none; }
-  .terminal-wrapper { padding: 0; }
-  .window-frame { border-radius: 0; border: none; }
+  .sidebar-ad {
+    display: none;
+  }
+
+  .terminal-wrapper {
+    padding: 0;
+  }
+
+  .window-frame {
+    border-radius: 0;
+    border: none;
+  }
+
   #terminal {
     padding: 10px 12px 12px;
     line-height: 1.5;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
+
   .terminal-body {
     overflow: hidden;
   }
