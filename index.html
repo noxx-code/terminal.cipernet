@@ -1,53 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WebLinux Terminal</title>
-<link rel="stylesheet" href="styles.css">
-<script src="script.js" defer></script>
-<script src="keyboard.js" defer></script>
-<link rel="icon" type="image/png" href="images/favicon.png">
-</head>
-<body>
-
-<div class="page-layout">
-  <!-- TERMINAL SIDE -->
-  <div class="terminal-wrapper">
-    <div class="window-frame">
-      <div class="title-bar">
-        <div class="title-bar-buttons">
-          <div class="title-bar-btn close"></div>
-          <div class="title-bar-btn minimize"></div>
-          <div class="title-bar-btn maximize"></div>
-        </div>
-        <div class="title-bar-title">user@weblinux <span>~</span> <span>— bash</span></div>
-      </div>
-      <div class="terminal-body">
-        <div id="terminal" tabindex="0"></div>
-      </div>
-      <div class="status-bar">
-        <div class="status-bar-left">
-          <div class="status-indicator">
-            <div class="status-dot"></div>
-            <span>bash</span>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebLinux Terminal</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="script.js" defer></script>
+    <script src="keyboard.js" defer></script>
+    <link rel="icon" type="image/png" href="images/favicon.png">
+  </head>
+  <body>
+    <div class="page-layout">
+      <!-- Terminal panel -->
+      <div class="terminal-wrapper">
+        <div class="window-frame">
+          <div class="title-bar">
+            <div class="title-bar-buttons">
+              <div class="title-bar-btn close"></div>
+              <div class="title-bar-btn minimize"></div>
+              <div class="title-bar-btn maximize"></div>
+            </div>
+            <div class="title-bar-title">user@weblinux <span>~</span>
+              <span>— bash</span>
+            </div>
           </div>
-          <span id="status-cwd">~</span>
+          <div class="terminal-body">
+            <div id="terminal" tabindex="0"></div>
+          </div>
+          <div class="status-bar">
+            <div class="status-bar-left">
+              <div class="status-indicator">
+                <div class="status-dot"></div>
+                <span>bash</span>
+              </div>
+              <span id="status-cwd">~</span>
+            </div>
+            <div class="status-bar-right">
+              <span id="status-time"></span>
+              <span>UTF-8</span>
+            </div>
+          </div>
         </div>
-        <div class="status-bar-right">
-          <span id="status-time"></span>
-          <span>UTF-8</span>
-        </div>
+      </div>
+      <!-- Right sidebar ad placeholders -->
+      <div class="sidebar-ad">
+        <div class="ad-placeholder tall">Ad Space</div>
+        <div class="ad-placeholder medium">Ad Space</div>
+        <div class="ad-placeholder banner">Ad Space</div>
       </div>
     </div>
-  </div>
-
-  <!-- AD SIDEBAR -->
-  <div class="sidebar-ad">
-    <div class="ad-placeholder tall">Ad Space</div>
-    <div class="ad-placeholder medium">Ad Space</div>
-    <div class="ad-placeholder banner">Ad Space</div>
-  </div>
-</div>
-</body>
+  </body>
 </html>
