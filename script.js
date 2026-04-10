@@ -259,6 +259,22 @@ const Pkg=(()=>{const inst=new Set(['bash','coreutils','grep','sed','awk','tar',
 })();
 
 /* ====== MAN PAGES ====== */
+/* ====== JSON MANAGERS INITIALIZATION ====== */
+async function initializeJSONManagers() {
+  try {
+    // Load command manifest
+    await CommandManager.init();
+    // Load manual pages
+    await ManManager.init();
+    // Load VFS initial state
+    await VFSManager.init();
+    console.log('JSON managers initialized successfully');
+  } catch (error) {
+    console.warn('Error initializing JSON managers:', error);
+  }
+}
+
+/* ====== MAN PAGES ====== */
 const Man={
   ls:{section:'1',name:'ls',summary:'list directory contents',synopsis:'ls [OPTION]... [FILE]...',description:'List files and directories in the current directory or in the paths you pass in.',options:['-a  do not ignore entries starting with .','-l  use a long listing format','-h  with -l, print human readable sizes','-R  list subdirectories recursively'],examples:['ls','ls -la /etc','ls -lh ~/projects'],seealso:['cd(1)','find(1)','stat(1)']},
   cd:{section:'1',name:'cd',summary:'change the shell working directory',synopsis:'cd [DIR]',description:'Change the current working directory. With no argument, switch to the home directory.',examples:['cd /var/log','cd ..','cd ~'],seealso:['pwd(1)','pushd(1)','popd(1)']},
@@ -313,10 +329,21 @@ const Man={
   scp:{section:'1',name:'scp',summary:'secure copy files over SSH',synopsis:'scp SOURCE TARGET',description:'Simulated secure copy client for remote transfer workflows.',examples:['scp file.txt user@example.com:/tmp/'],seealso:['ssh(1)']}
 };
 
-
-function manRecord(name){return Man[name]||null}
+function manRecord(name){
+  // Try JSON manager first if available
+  if (ManManager && ManManager.exists(name)) {
+    return ManManager.getEntry(name);
+  }
+  // Fallback to hardcoded Man object
+  return Man[name]||null;
+}
 
 function manPage(name,section){
+  // Try JSON manager first if available
+  if (ManManager && ManManager.exists(name)) {
+    return ManManager.getPage(name, section);
+  }
+  // Fallback to hardcoded logic
   const entry=manRecord(name);
   if(!entry)return null;
   if(section&&String(section)!==String(entry.section))return null;
@@ -336,12 +363,22 @@ function manPage(name,section){
 }
 
 function manWhatis(name){
+  // Try JSON manager first if available
+  if (ManManager && ManManager.exists(name)) {
+    return ManManager.getWhatis(name);
+  }
+  // Fallback to hardcoded logic
   const entry=manRecord(name);
   if(!entry)return null;
   return `${entry.name} (${entry.section}) - ${entry.summary}`;
 }
 
 function manApropos(term){
+  // Try JSON manager first if available
+  if (ManManager && ManManager.exists) {
+    return ManManager.searchApropos(term);
+  }
+  // Fallback to hardcoded logic
   const needle=(term||'').toLowerCase();
   if(!needle)return 'apropos: keyword expected';
   const hits=Object.values(Man)
@@ -457,9 +494,24 @@ const Pipe=(()=>{
 
 /* ====== INIT FS ====== */
 function initFS(){
-  VFS._mkdirp('/home/user/projects');VFS._mkdirp('/home/user/.config');VFS._mkdirp('/home/user/.ssh');
-  VFS._mkdirp('/etc');VFS._mkdirp('/var/log');VFS._mkdirp('/tmp');
-  VFS._mkdirp('/usr/bin');VFS._mkdirp('/usr/local/bin');VFS._mkdirp('/bin');VFS._mkdirp('/root');VFS._mkdirp('/opt');VFS._mkdirp('/dev');
+  // If VFS was initialized from JSON, skip default initialization
+  if (VFSManager && VFSManager.isFromJSON()) {
+    console.log('VFS initialized from JSON manifest');
+    return;
+  }
+  // Otherwise, use default hardcoded initialization
+  VFS._mkdirp('/home/user/projects');
+  VFS._mkdirp('/home/user/.config');
+  VFS._mkdirp('/home/user/.ssh');
+  VFS._mkdirp('/etc');
+  VFS._mkdirp('/var/log');
+  VFS._mkdirp('/tmp');
+  VFS._mkdirp('/usr/bin');
+  VFS._mkdirp('/usr/local/bin');
+  VFS._mkdirp('/bin');
+  VFS._mkdirp('/root');
+  VFS._mkdirp('/opt');
+  VFS._mkdirp('/dev');
   VFS._mkfile('/home/user/notes.txt','Meeting Notes - March 2026\n==========================\n1. Project deadline moved to April 15th\n2. New team member starting next week: Sarah\n3. Budget approved for cloud infrastructure\n4. Weekly standups changed to 10:00 AM\n5. Code review process needs improvement\n6. Consider migrating to microservices\n7. Performance benchmarks due by end of month\n8. Security audit scheduled for next quarter');
   VFS._mkfile('/home/user/todo.txt','TODO List\n---------\n[x] Set up development environment\n[x] Review pull requests\n[ ] Write unit tests for auth module\n[ ] Update API documentation\n[ ] Fix login page CSS bug\n[ ] Deploy staging environment\n[ ] Refactor database queries\n[ ] Add error handling to payment flow\n[ ] Schedule team retrospective\n[ ] Update dependencies to latest versions');
   VFS._mkfile('/home/user/projects/app.js','const express = require(\'express\');\nconst app = express();\nconst PORT = process.env.PORT || 3000;\n\napp.use(express.json());\n\napp.get(\'/\', (req, res) => {\n  res.json({ message: \'Welcome to the API\', version: \'2.1.0\' });\n});\n\napp.get(\'/api/users\', (req, res) => {\n  res.json([\n    { id: 1, name: \'Alice\', role: \'admin\' },\n    { id: 2, name: \'Bob\', role: \'user\' },\n    { id: 3, name: \'Charlie\', role: \'moderator\' }\n  ]);\n});\n\napp.listen(PORT, () => console.log(\'Server on port \' + PORT));',{permissions:'-rwxr-xr-x'});
@@ -480,8 +532,12 @@ function initFS(){
   VFS._mkfile('/var/log/auth.log','Mar 27 08:00:01 weblinux sshd[1042]: Server listening on port 22\nMar 27 09:12:44 weblinux sshd[5102]: Accepted publickey for user\n');
 }
 
+
 /* ====== TERMINAL UI ====== */
 (function boot() {
+  // Initialize JSON managers (async)
+  initializeJSONManagers().catch(err => console.warn('JSON managers initialization error:', err));
+
   initFS();
   const terminalElement = document.getElementById('terminal');
   const terminalState = {
