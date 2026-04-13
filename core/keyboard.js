@@ -10,15 +10,26 @@
   keyboardElement.className = "on-screen-keyboard";
 
   const utilityRowKeyRows = [
-    ["Escape", "/", "-", "Home", "ArrowUp", "End"],
-    ["PageUp", "Control", "Alt", "ArrowLeft", "ArrowDown", "ArrowRight"]
+    ["Escape", "\"", "-", "<", "ArrowUp", ">"],
+    ["$", "Control", "Alt", "ArrowLeft", "ArrowDown", "ArrowRight"]
   ];
   const mainKeyRows = [
     ["1","2","3","4","5","6","7","8","9","0"],
     ["q","w","e","r","t","y","u","i","o","p"],
     ["a","s","d","f","g","h","j","k","l","⌫"],
     ["z","x","c","v","b","n","m",",",".","?","↵"],
-    ["⇧","Space","⌫","↵"]
+    ["⇧","symbol","Space","⌫","↵"]
+  ];
+  const symbolUtilityRowKeyRows = [
+    ["Escape", "\"", "-", "<", "ArrowUp", ">"],
+    ["$", "Control", "Alt", "ArrowLeft", "ArrowDown", "ArrowRight"]
+  ];
+  const symbolMainKeyRows = [
+    ["!","@","#","$","%","^","&","*","(",")"],
+    ["[","]","{","}","<",">","=","+","-","_"],
+    [";",":","'","\"","/","\\","|","⌫"],
+    ["&&","||","`","~",".",",","?","!","↵"],
+    ["⇧","abc","Space","⌫","↵"]
   ];
   const symbolMap = {
     Escape: "ESC",
@@ -33,7 +44,12 @@
     PageUp: "PGUP"
   };
   let shiftEnabled = false;
+  let isSymbolMode = false;
   let lastTouchAt = 0;
+
+  function toggleKeyboard() {
+    isSymbolMode = !isSymbolMode;
+  }
 
   function sendKeyToTerminal(key){
     if(typeof window.handleKey !== "function") return;
@@ -90,6 +106,12 @@
         if(event.type === "click" && Date.now() - lastTouchAt < 300) return;
         if(event.type === "touchstart") lastTouchAt = Date.now();
 
+        if (key === "symbol" || key === "abc") {
+          toggleKeyboard();
+          renderKeyboard();
+          return;
+        }
+
         if(normalizedKey === "Shift"){
           shiftEnabled = !shiftEnabled;
           keyboardElement.classList.toggle("shift-active", shiftEnabled);
@@ -125,8 +147,22 @@
     event.preventDefault();
   }, { passive: false });
 
-  for(const rowKeys of utilityRowKeyRows) buildRow(rowKeys, "on-screen-keyboard-utility-row");
-  for(const rowKeys of mainKeyRows) buildRow(rowKeys, "on-screen-keyboard-main-row");
+  function renderKeyboard(){
+    keyboardElement.innerHTML = "";
+
+    const activeUtilityRows = isSymbolMode
+      ? symbolUtilityRowKeyRows
+      : utilityRowKeyRows;
+
+    const activeMainRows = isSymbolMode
+      ? symbolMainKeyRows
+      : mainKeyRows;
+
+    for(const rowKeys of activeUtilityRows) buildRow(rowKeys, "on-screen-keyboard-utility-row");
+    for(const rowKeys of activeMainRows) buildRow(rowKeys, "on-screen-keyboard-main-row");
+  }
+
+  renderKeyboard();
 
   document.body.appendChild(keyboardElement);
 })();
