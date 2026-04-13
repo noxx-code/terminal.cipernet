@@ -18,7 +18,7 @@
     ["q","w","e","r","t","y","u","i","o","p"],
     ["a","s","d","f","g","h","j","k","l","⌫"],
     ["z","x","c","v","b","n","m",",",".","?","↵"],
-    ["⇧","symbol","Space","⌫","↵"]
+    ["⇧","#+=","Space","⌫","↵"]
   ];
   const symbolUtilityRowKeyRows = [
     ["Escape", "\"", "-", "<", "ArrowUp", ">"],
@@ -106,7 +106,7 @@
         if(event.type === "click" && Date.now() - lastTouchAt < 300) return;
         if(event.type === "touchstart") lastTouchAt = Date.now();
 
-        if (key === "symbol" || key === "abc") {
+        if (key === "#+=" || key === "abc") {
           toggleKeyboard();
           renderKeyboard();
           return;
