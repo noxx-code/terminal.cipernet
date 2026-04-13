@@ -57,3 +57,52 @@ It provides a command-line interface simulation directly in the browser.
 ```bash
 git clone https://github.com/noxx-code/terminal.cipernet.git
 cd terminal.cipernet
+```
+
+Run the project by opening `index.html` in a browser.
+
+## 🗂️ Project Structure
+
+```text
+terminal.cipernet/
+├─ assets/
+│  ├─ images/
+│  │  └─ favicon.png
+│  └─ styles/
+│     └─ styles.css
+├─ config/
+│  ├─ commands-manifest.json
+│  ├─ manual-pages.json
+│  └─ vfs-initial-state.json
+├─ core/
+│  ├─ script.js
+│  └─ keyboard.js
+├─ managers/
+│  ├─ commandManager.js
+│  ├─ manManager.js
+│  └─ vfsManager.js
+├─ utils/
+│  └─ jsonLoader.js
+├─ index.html
+├─ README.md
+└─ LICENSE
+```
+
+## 🧩 Folder Roles
+
+- `core`: Main terminal runtime logic and input behavior.
+- `utils`: Shared helper modules used by other layers.
+- `managers`: Data/domain managers for commands, man pages, and VFS initialization.
+- `config`: JSON manifests used at runtime.
+- `assets`: Static UI assets such as styles and images.
+
+## 🔄 Runtime Load Order
+
+The page loads scripts in this order to preserve dependencies:
+
+1. `utils/jsonLoader.js`
+2. `managers/commandManager.js`
+3. `managers/manManager.js`
+4. `managers/vfsManager.js`
+5. `core/script.js`
+6. `core/keyboard.js`
