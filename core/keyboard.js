@@ -98,7 +98,7 @@
       if(normalizedKey === "Backspace" || normalizedKey === "Enter" || normalizedKey === "Tab" || normalizedKey === "Shift") keyButton.classList.add("key-wide");
       if(normalizedKey === "Space") keyButton.classList.add("key-space");
       if(rowClass === "on-screen-keyboard-utility-row") keyButton.classList.add("key-action");
-      if(normalizedKey === "Backspace" || normalizedKey === "Enter" || normalizedKey === "Shift") keyButton.classList.add("key-action");
+      if(normalizedKey === "Backspace" || normalizedKey === "Enter" || normalizedKey === "Shift" || key === "#+=") keyButton.classList.add("key-action");
 
       const onPress = (event)=>{
         event.preventDefault();
