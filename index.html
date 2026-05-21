@@ -10,7 +10,6 @@
       <script src="managers/manManager.js" defer></script>
       <script src="managers/vfsManager.js" defer></script>
     <script src="core/script.js" defer></script>
-    <script src="core/keyboard.js" defer></script>
     <link rel="icon" type="image/png" href="assets/images/favicon.png">
   </head>
   <body>
@@ -30,6 +29,7 @@
           </div>
           <div class="terminal-body">
             <div id="terminal" tabindex="0"></div>
+            <input id="terminal-input" class="terminal-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-hidden="true">
           </div>
           <div class="status-bar">
             <div class="status-bar-left">

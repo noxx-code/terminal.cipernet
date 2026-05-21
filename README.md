@@ -75,8 +75,7 @@ terminal.cipernet/
 │  ├─ manual-pages.json
 │  └─ vfs-initial-state.json
 ├─ core/
-│  ├─ script.js
-│  └─ keyboard.js
+│  └─ script.js
 ├─ managers/
 │  ├─ commandManager.js
 │  ├─ manManager.js
@@ -105,4 +104,3 @@ The page loads scripts in this order to preserve dependencies:
 3. `managers/manManager.js`
 4. `managers/vfsManager.js`
 5. `core/script.js`
-6. `core/keyboard.js`

@@ -540,6 +540,7 @@ function initFS(){
 
   initFS();
   const terminalElement = document.getElementById('terminal');
+  const terminalInput = document.getElementById('terminal-input');
   const terminalState = {
     cwd: '/home/user',
     history: [],
@@ -549,6 +550,10 @@ function initFS(){
     saved: '',
   };
   const scheduleTerminalFit = () => TerminalFit.schedule(terminalElement);
+
+  function focusTerminalInput() {
+    if (terminalInput) terminalInput.focus();
+  }
 
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(scheduleTerminalFit);
@@ -661,6 +666,31 @@ function initFS(){
     scrollToBottom();
   }
 
+  if (terminalInput) {
+    terminalInput.value = '';
+    terminalInput.addEventListener('input', function () {
+      const text = terminalInput.value.replace(/[\r\n]+/g, '');
+      terminalInput.value = '';
+      insertChars(text);
+    });
+
+    terminalInput.addEventListener('keydown', function (event) {
+      if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) return;
+      if (handleKey(event.key, event)) event.preventDefault();
+    });
+
+    terminalInput.addEventListener('paste', function (event) {
+      event.preventDefault();
+      const pastedText = (event.clipboardData || window.clipboardData).getData('text').replace(/[\r\n]+/g, '');
+      insertChars(pastedText);
+      terminalInput.value = '';
+    });
+
+    terminalInput.addEventListener('blur', focusTerminalInput);
+  }
+
+  terminalElement.addEventListener('pointerdown', focusTerminalInput);
+
   /* Boot sequence - typewriter style */
   const bootLines = [
     '\x1b[1;32m  ██╗    ██╗███████╗██████╗ ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗\x1b[0m',
@@ -685,6 +715,7 @@ function initFS(){
     } else {
       renderInput();
       scrollToBottom();
+      focusTerminalInput();
     }
   }
   bootStep();
@@ -894,16 +925,4 @@ function initFS(){
   }
 
   window.handleKey = handleKey;
-
-  /* Keys */
-  document.addEventListener('keydown', function (event) {
-    const target = event.target;
-    if (target && target.closest && target.closest('.on-screen-keyboard')) return;
-    if (handleKey(event.key, event)) event.preventDefault();
-  });
-  document.addEventListener('paste', function (event) {
-    event.preventDefault();
-    const pastedText = (event.clipboardData || window.clipboardData).getData('text').replace(/[\r\n]+/g, '');
-    insertChars(pastedText);
-  });
 })();
