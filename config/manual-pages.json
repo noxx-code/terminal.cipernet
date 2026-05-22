@@ -343,6 +343,15 @@
       "examples": ["less README.md"],
       "seealso": ["cat(1)", "head(1)", "tail(1)"]
     },
+    "nano": {
+      "name": "nano",
+      "section": "1",
+      "summary": "simple fullscreen text editor",
+      "synopsis": "nano FILE",
+      "description": "Open a fullscreen nano-style editor overlay for editing files in the virtual filesystem.",
+      "examples": ["nano notes.txt", "nano ~/projects/app.js"],
+      "seealso": ["cat(1)", "less(1)", "man(1)"]
+    },
     "history": {
       "name": "history",
       "section": "1",

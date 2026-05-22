@@ -48,6 +48,16 @@
       "options": ["-p  no error if existing, make parent directories as needed"],
       "examples": ["mkdir projects", "mkdir -p ~/work/app"],
       "seealso": ["rmdir(1)", "cd(1)"]
+    "nano": {
+      "name": "nano",
+      "section": "1",
+      "category": "EDITORS",
+      "summary": "simple fullscreen text editor",
+      "synopsis": "nano FILE",
+      "description": "Open a fullscreen nano-style editor overlay for editing files in the virtual filesystem.",
+      "examples": ["nano notes.txt", "nano ~/projects/app.js"],
+      "seealso": ["cat(1)", "less(1)", "man(1)"]
+    },
     },
     "rmdir": {
       "name": "rmdir",
