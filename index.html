@@ -9,6 +9,7 @@
       <script src="managers/commandManager.js" defer></script>
       <script src="managers/manManager.js" defer></script>
       <script src="managers/vfsManager.js" defer></script>
+    <script src="core/inputManager.js" defer></script>
     <script src="core/script.js" defer></script>
     <link rel="icon" type="image/png" href="assets/images/favicon.png">
   </head>
@@ -29,7 +30,7 @@
           </div>
           <div class="terminal-body">
             <div id="terminal" tabindex="0"></div>
-            <input id="terminal-input" class="terminal-input" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-hidden="true">
+            <textarea id="terminal-input" class="terminal-input" rows="1" autocomplete="on" autocapitalize="sentences" autocorrect="on" spellcheck="false" aria-label="Terminal input proxy"></textarea>
           </div>
           <div class="status-bar">
             <div class="status-bar-left">

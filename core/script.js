@@ -541,6 +541,7 @@ function initFS(){
   initFS();
   const terminalElement = document.getElementById('terminal');
   const terminalInput = document.getElementById('terminal-input');
+  let inputManager = null;
   const terminalState = {
     cwd: '/home/user',
     history: [],
@@ -550,10 +551,6 @@ function initFS(){
     saved: '',
   };
   const scheduleTerminalFit = () => TerminalFit.schedule(terminalElement);
-
-  function focusTerminalInput() {
-    if (terminalInput) terminalInput.focus();
-  }
 
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(scheduleTerminalFit);
@@ -666,31 +663,6 @@ function initFS(){
     scrollToBottom();
   }
 
-  if (terminalInput) {
-    terminalInput.value = '';
-    terminalInput.addEventListener('input', function () {
-      const text = terminalInput.value.replace(/[\r\n]+/g, '');
-      terminalInput.value = '';
-      insertChars(text);
-    });
-
-    terminalInput.addEventListener('keydown', function (event) {
-      if (event.key.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) return;
-      if (handleKey(event.key, event)) event.preventDefault();
-    });
-
-    terminalInput.addEventListener('paste', function (event) {
-      event.preventDefault();
-      const pastedText = (event.clipboardData || window.clipboardData).getData('text').replace(/[\r\n]+/g, '');
-      insertChars(pastedText);
-      terminalInput.value = '';
-    });
-
-    terminalInput.addEventListener('blur', focusTerminalInput);
-  }
-
-  terminalElement.addEventListener('pointerdown', focusTerminalInput);
-
   /* Boot sequence - typewriter style */
   const bootLines = [
     '\x1b[1;32m  ██╗    ██╗███████╗██████╗ ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗\x1b[0m',
@@ -715,7 +687,7 @@ function initFS(){
     } else {
       renderInput();
       scrollToBottom();
-      focusTerminalInput();
+      if (inputManager) inputManager.focus();
     }
   }
   bootStep();
@@ -906,22 +878,17 @@ function initFS(){
       return true;
     }
 
-    if (key === ' ') {
-      insertChars(' ');
-      return true;
-    }
-
-    if (key.length === 1 && !isCtrlPressed && !isAltPressed && !isMetaPressed) {
-      insertChars(key);
-      return true;
-    }
-
-    if (key.length === 1 && isShiftPressed && !isCtrlPressed && !isAltPressed && !isMetaPressed) {
-      insertChars(key);
-      return true;
-    }
-
     return false;
+  }
+
+  if (terminalInput && typeof window.InputManager === 'function') {
+    inputManager = new window.InputManager({
+      inputElement: terminalInput,
+      terminalElement,
+      onText: insertChars,
+      onKey: handleKey,
+      onPaste: (text) => insertChars(text)
+    });
   }
 
   window.handleKey = handleKey;
