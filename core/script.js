@@ -308,6 +308,7 @@ const Man={
   du:{section:'1',name:'du',summary:'estimate file space usage',synopsis:'du [OPTION]... [FILE]...',description:'Summarize disk usage for files and directories.',options:['-h  human readable sizes','-s  display only a total for each argument'],examples:['du -sh .','du -h /home/user'],seealso:['df(1)']},
   free:{section:'1',name:'free',summary:'display amount of free and used memory in the system',synopsis:'free [OPTION]...',description:'Show memory usage for the simulated system.',options:['-h  print human readable output'],examples:['free','free -h'],seealso:['top(1)']},
   less:{section:'1',name:'less',summary:'opposite of more',synopsis:'less FILE',description:'View a file one screen at a time; in this terminal it is rendered as a static page ending marker.',examples:['less README.md'],seealso:['cat(1)','head(1)','tail(1)']},
+  nano:{section:'1',name:'nano',summary:'simple fullscreen text editor',synopsis:'nano FILE',description:'Open a fullscreen nano-style editor overlay for editing files in the virtual filesystem.',examples:['nano notes.txt','nano ~/projects/app.js'],seealso:['cat(1)','less(1)','man(1)']},
   history:{section:'1',name:'history',summary:'command history',synopsis:'history',description:'Show commands entered in the current browser session.',examples:['history'],seealso:['fc(1)']},
   man:{section:'1',name:'man',summary:'an interface to the system reference manuals',synopsis:'man [OPTION]... [SECTION] PAGE...',description:'Show detailed manual pages, summaries, or search results from the built-in static manual database.',options:['-f, --whatis  display a one-line description for a manual page','-k, --apropos  search the one-line descriptions for a keyword'],examples:['man ls','man -f grep','man -k network','man 5 passwd'],seealso:['help(1)','info(1)']},
   help:{section:'1',name:'help',summary:'display help for built-in commands',synopsis:'help',description:'Show a categorized list of commands supported by the terminal.',examples:['help'],seealso:['man(1)']},
@@ -404,6 +405,7 @@ C.cat=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length
 C.head=(args,s,stdin)=>{let n=10;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null)return stdin.split('\n').slice(0,n).join('\n');if(!files.length)return'head: missing operand';const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`head: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);r.push(c.split('\n').slice(0,n).join('\n'))}return r.join('\n')};
 C.tail=(args,s,stdin)=>{let n=10,fol=false;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(args[i]==='-f')fol=true;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null){const l=stdin.split('\n');return l.slice(Math.max(0,l.length-n)).join('\n')}if(!files.length)return'tail: missing operand';const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`tail: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);const l=c.split('\n');r.push(l.slice(Math.max(0,l.length-n)).join('\n'))}if(fol)r.push('\x1b[33m[tail -f simulated]\x1b[0m');return r.join('\n')};
 C.less=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'less: missing operand';const f=args.find(a=>!a.startsWith('-'));const c=VFS.read(f,s.cwd);if(c===null)return`${f}: No such file or directory`;return c+'\n\x1b[7m(END)\x1b[0m'};
+C.nano=(args,s)=>{const target=args.find(a=>!a.startsWith('-'));if(!target)return'nano: missing file operand';if(!window.NanoEditor||typeof window.NanoEditor.open!=='function')return'nano: editor is not available';const result=window.NanoEditor.open(target,s.cwd);return result&&result.success?'':(result&&result.message?result.message:'nano: editor is not available')};
 C.grep=(args,s,stdin)=>{let ic=false,ln=false,rec=false,inv=false,cnt=false;const pos=[];for(const a of args){if(a.startsWith('-')&&!a.startsWith('--')){if(a.includes('i'))ic=true;if(a.includes('n'))ln=true;if(a.includes('r'))rec=true;if(a.includes('v'))inv=true;if(a.includes('c'))cnt=true}else pos.push(a)}if(!pos.length)return'grep: missing pattern';const pat=pos[0];const files=pos.slice(1);let re;try{re=new RegExp(pat,ic?'i':'')}catch(e){return`grep: Invalid regex: '${pat}'`}function gC(ct,fn,mf){const ls=ct.split('\n');const r=[];let count=0;for(let i=0;i<ls.length;i++){const m=re.test(ls[i]);if(m!==inv){count++;if(!cnt){let l=ls[i],px='';if(mf&&fn)px+=`\x1b[35m${fn}\x1b[0m:`;if(ln)px+=`\x1b[32m${i+1}\x1b[0m:`;if(!inv)l=l.replace(re,m=>`\x1b[1;31m${m}\x1b[0m`);r.push(px+l)}}}if(cnt)r.push((mf&&fn?fn+':':'')+count);return r}if(!files.length){if(stdin==null)return'grep: no input';return gC(stdin,null,false).join('\n')}if(rec){const r=[];for(const f of files){const found=VFS.findN(f,s.cwd,n=>n.type==='file');for(const path of found){const c=VFS.read(path,s.cwd);if(c!==null)r.push(...gC(c,path,true))}}return r.join('\n')}const r=[];const mf=files.length>1;for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`grep: ${f}: No such file or directory`);continue}r.push(...gC(c,f,mf))}return r.join('\n')};
 C.find=(args,s)=>{let sp='.',np=null,tf=null;for(let i=0;i<args.length;i++){if(args[i]==='-name'&&args[i+1])np=args[++i];else if(args[i]==='-type'&&args[i+1])tf=args[++i];else if(!args[i].startsWith('-'))sp=args[i]}return VFS.findN(sp,s.cwd,(n)=>{if(np){const re=new RegExp('^'+np.replace(/\*/g,'.*').replace(/\?/g,'.')+'$');if(!re.test(n.name))return false}if(tf){if(tf==='f'&&n.type!=='file')return false;if(tf==='d'&&n.type!=='directory')return false}return true}).join('\n')};
 C.locate=(args,s)=>{if(!args.length)return'locate: no pattern';const re=new RegExp(args[0],'i');const r=VFS.findN('/',s.cwd,n=>re.test(n.name));return r.length?r.join('\n'):`locate: no results for '${args[0]}'`};
@@ -466,7 +468,7 @@ C.env=(a,s)=>`HOME=/home/user\nUSER=${US.cur()}\nSHELL=/bin/bash\nPWD=${s.cwd}\n
 C.export=()=>'';C.alias=()=>'';
 C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
 C.sudo=(args,s,stdin)=>{if(!args.length)return'usage: sudo command';if(C[args[0]])return C[args[0]](args.slice(1),s,stdin);return`sudo: ${args[0]}: command not found`};
-C.help=()=>{const sec={'FILE SYSTEM':['pwd','ls','cd','mkdir','rmdir','rm','cp','mv','touch'],'FILE VIEWING':['cat','head','tail','less'],'SEARCH':['grep','find','locate','which'],'TEXT':['sort','uniq','wc','cut','awk','sed'],'PERMISSIONS':['chmod','chown','chgrp'],'PROCESS':['ps','top','kill'],'COMPRESSION':['tar','zip','gzip','gunzip'],'NETWORK':['ping','ifconfig','netstat','ssh','scp'],'PACKAGES':['apt'],'SYSTEM':['df','du','free','uname','whoami','who','hostname','id'],'USER MGMT':['useradd','userdel','passwd'],'MISC':['echo','date','cal','history','clear','man','env','help']};let o='\x1b[1;37mAvailable Commands\x1b[0m\n';for(const[s,cmds]of Object.entries(sec))o+=`\n\x1b[1;33m${s}\x1b[0m\n  \x1b[36m${cmds.join('\x1b[0m, \x1b[36m')}\x1b[0m\n`;o+='\n\x1b[90mSupports: pipes (|), redirects (> >> <), Tab completion, history\x1b[0m';return o};
+C.help=()=>{const sec={'FILE SYSTEM':['pwd','ls','cd','mkdir','rmdir','rm','cp','mv','touch'],'FILE VIEWING':['cat','head','tail','less'],'SEARCH':['grep','find','locate','which'],'TEXT':['sort','uniq','wc','cut','awk','sed'],'EDITORS':['nano'],'PERMISSIONS':['chmod','chown','chgrp'],'PROCESS':['ps','top','kill'],'COMPRESSION':['tar','zip','gzip','gunzip'],'NETWORK':['ping','ifconfig','netstat','ssh','scp'],'PACKAGES':['apt'],'SYSTEM':['df','du','free','uname','whoami','who','hostname','id'],'USER MGMT':['useradd','userdel','passwd'],'MISC':['echo','date','cal','history','clear','man','env','help']};let o='\x1b[1;37mAvailable Commands\x1b[0m\n';for(const[s,cmds]of Object.entries(sec))o+=`\n\x1b[1;33m${s}\x1b[0m\n  \x1b[36m${cmds.join('\x1b[0m, \x1b[36m')}\x1b[0m\n`;o+='\n\x1b[90mSupports: pipes (|), redirects (> >> <), Tab completion, history\x1b[0m';return o};
 
 /* ====== PIPE ENGINE ====== */
 const Pipe=(()=>{
@@ -542,6 +544,7 @@ function initFS(){
   const terminalElement = document.getElementById('terminal');
   const terminalInput = document.getElementById('terminal-input');
   let inputManager = null;
+  let terminalMode = 'normal';
   const terminalState = {
     cwd: '/home/user',
     history: [],
@@ -559,6 +562,12 @@ function initFS(){
   if ('ResizeObserver' in window) {
     const resizeObserver = new ResizeObserver(() => scheduleTerminalFit());
     if (terminalElement.parentElement) resizeObserver.observe(terminalElement.parentElement);
+  }
+
+  function setTerminalMode(mode) {
+    terminalMode = mode === 'nano' ? 'nano' : 'normal';
+    if (inputManager) inputManager.setEnabled(terminalMode === 'normal');
+    document.body.classList.toggle('nano-active', terminalMode === 'nano');
   }
 
   // Re-fit when output changes so long lines stay visible without clipping.
@@ -743,6 +752,10 @@ function initFS(){
   }
 
   function handleKey(key, metadata = {}) {
+    if (terminalMode !== 'normal') {
+      return window.NanoEditor && typeof window.NanoEditor.isActive === 'function' ? window.NanoEditor.isActive() : true;
+    }
+
     const isCtrlPressed = !!metadata.ctrlKey;
     const isAltPressed = !!metadata.altKey;
     const isShiftPressed = !!metadata.shiftKey;
@@ -888,6 +901,17 @@ function initFS(){
       onText: insertChars,
       onKey: handleKey,
       onPaste: (text) => insertChars(text)
+    });
+  }
+
+  if (window.NanoEditor && typeof window.NanoEditor.init === 'function') {
+    window.NanoEditor.init({
+      resolvePath: (path, cwd) => VFS.absStr(path, cwd),
+      readFile: (path, cwd) => VFS.read(path, cwd),
+      writeFile: (path, cwd, content) => VFS.write(path, cwd, content),
+      getInfo: (path, cwd) => VFS.getN(path, cwd),
+      setTerminalMode,
+      focusTerminal: () => { if (inputManager) inputManager.focus(); }
     });
   }
 

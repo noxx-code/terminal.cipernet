@@ -9,6 +9,7 @@
       <script src="managers/commandManager.js" defer></script>
       <script src="managers/manManager.js" defer></script>
       <script src="managers/vfsManager.js" defer></script>
+      <script src="core/nanoEditor.js" defer></script>
     <script src="core/inputManager.js" defer></script>
     <script src="core/script.js" defer></script>
     <link rel="icon" type="image/png" href="assets/images/favicon.png">
@@ -52,6 +53,26 @@
         <div class="ad-placeholder tall">Ad Space</div>
         <div class="ad-placeholder medium">Ad Space</div>
         <div class="ad-placeholder banner">Ad Space</div>
+      </div>
+    </div>
+
+    <div id="nano-overlay" class="nano-overlay" hidden aria-hidden="true">
+      <div class="nano-window" role="dialog" aria-modal="true" aria-labelledby="nano-title">
+        <div class="nano-topbar">
+          <div id="nano-title" class="nano-topbar-title">GNU nano 6.5</div>
+          <div id="nano-file" class="nano-topbar-file">[ No File ]</div>
+        </div>
+        <textarea id="nano-editor" class="nano-editor" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" aria-label="Nano editor"></textarea>
+        <div id="nano-message" class="nano-message-bar">Ctrl+G for help.</div>
+        <div id="nano-footer" class="nano-footer">^G Help  ^O Write Out  ^X Exit</div>
+        <div id="nano-help" class="nano-help-panel" hidden>
+          <div class="nano-help-card">
+            <div class="nano-help-title">Nano Help</div>
+            <div class="nano-help-text">Ctrl+O writes the current buffer back into the virtual filesystem.</div>
+            <div class="nano-help-text">Ctrl+X exits the editor. If the buffer is modified, press Ctrl+X twice to discard changes.</div>
+            <div class="nano-help-text">Ctrl+G toggles this help message.</div>
+          </div>
+        </div>
       </div>
     </div>
   </body>
