@@ -1,7 +1,6 @@
 /**
  * Virtual File System Manager
- * Loads and initializes the VFS from vfs-initial-state.json.
- * Provides helper functions for common VFS operations.
+ * Loads the browser VFS manifest and applies it to the runtime VFS.
  */
 const VFSManager = (() => {
   let vfsState = null;
@@ -18,6 +17,9 @@ const VFSManager = (() => {
     if (data) {
       vfsState = data;
       console.log('VFSManager: Loaded initial VFS state from manifest');
+      if (VFS && typeof VFS.reset === 'function') {
+        VFS.reset();
+      }
       await applyState();
     } else {
       console.warn('VFSManager: Failed to load VFS state, will use default initialization');
@@ -36,7 +38,8 @@ const VFSManager = (() => {
     // Create directories
     if (vfsState.directories && Array.isArray(vfsState.directories)) {
       for (const dirPath of vfsState.directories) {
-        VFS._mkdirp(dirPath);
+        const entry = typeof dirPath === 'string' ? { path: dirPath } : dirPath;
+        VFS._mkdirp(entry.path, '/', entry);
       }
     }
 
@@ -49,6 +52,33 @@ const VFSManager = (() => {
         if (owner) options.owner = owner;
         if (group) options.group = group;
         VFS._mkfile(path, content, options);
+      }
+    }
+
+    if (vfsState.virtualFiles && Array.isArray(vfsState.virtualFiles)) {
+      for (const virtualEntry of vfsState.virtualFiles) {
+        const { path, generator, permissions, owner, group, kind, device, readOnly } = virtualEntry;
+        VFS._mkvirtual(path, generator, '/', {
+          permissions,
+          owner,
+          group,
+          kind,
+          device,
+          readOnly,
+        });
+      }
+    }
+
+    if (vfsState.devices && Array.isArray(vfsState.devices)) {
+      for (const deviceEntry of vfsState.devices) {
+        const { path, generator, permissions, owner, group, device, readOnly } = deviceEntry;
+        VFS._mkdevice(path, generator || device, '/', {
+          permissions,
+          owner,
+          group,
+          device,
+          readOnly,
+        });
       }
     }
   }

@@ -188,48 +188,8 @@ const Ansi = (() => {
 })();
 
 /* ====== VFS ====== */
-const VFS=(()=>{
-  const now=()=>new Date().toISOString();
-  function mkN(name,type,o={}){return{name,type,content:o.content||'',children:type==='directory'?{}:null,permissions:o.permissions||(type==='directory'?'drwxr-xr-x':'-rw-r--r--'),owner:o.owner||'user',group:o.group||'user',createdAt:o.createdAt||now(),modifiedAt:o.modifiedAt||now(),size:o.content?o.content.length:(type==='directory'?4096:0)}}
-  const root=mkN('/','directory',{owner:'root',group:'root'});
-  function _mkdirp(p){const pts=p.split('/').filter(Boolean);let c=root;for(const x of pts){if(!c.children[x])c.children[x]=mkN(x,'directory');c=c.children[x]}return c}
-  function _mkfile(p,ct,o={}){const pts=p.split('/').filter(Boolean);const fn=pts.pop();let c=root;for(const x of pts){if(!c.children[x])c.children[x]=mkN(x,'directory');c=c.children[x]}c.children[fn]=mkN(fn,'file',{content:ct,...o});c.children[fn].size=ct.length;return c.children[fn]}
-  function resolve(ps,cwd){
-    if(!ps)return cwd.split('/').filter(Boolean);
-    let n=ps;if(n.startsWith('~'))n='/home/user'+n.slice(1);
-    let pts;if(n.startsWith('/'))pts=n.split('/').filter(Boolean);else pts=[...cwd.split('/').filter(Boolean),...n.split('/').filter(Boolean)];
-    const r=[];for(const p of pts){if(p==='.')continue;else if(p==='..'){if(r.length)r.pop()}else r.push(p)}return r;
-  }
-  function absStr(ps,cwd){return'/'+resolve(ps,cwd).join('/')}
-  function getN(ps,cwd){const pts=resolve(ps,cwd);let c=root;for(const p of pts){if(!c||c.type!=='directory'||!c.children[p])return null;c=c.children[p]}return c}
-  function getPN(ps,cwd){const pts=resolve(ps,cwd);if(!pts.length)return{parent:null,name:'/'};const name=pts.pop();let c=root;for(const p of pts){if(!c||c.type!=='directory'||!c.children[p])return{parent:null,name};c=c.children[p]}return{parent:c,name}}
-  function read(ps,cwd){const n=getN(ps,cwd);if(!n||n.type!=='file')return null;return n.content}
-  function write(ps,cwd,ct){const{parent:p,name}=getPN(ps,cwd);if(!p)return false;if(p.children[name]&&p.children[name].type==='directory')return false;if(p.children[name]){p.children[name].content=ct;p.children[name].size=ct.length;p.children[name].modifiedAt=now()}else{p.children[name]=mkN(name,'file',{content:ct});p.children[name].size=ct.length}return true}
-  function append(ps,cwd,ct){const{parent:p,name}=getPN(ps,cwd);if(!p)return false;if(p.children[name]){if(p.children[name].type==='directory')return false;p.children[name].content+=ct;p.children[name].size=p.children[name].content.length;p.children[name].modifiedAt=now()}else{p.children[name]=mkN(name,'file',{content:ct});p.children[name].size=ct.length}return true}
-  function mkdir(ps,cwd){const{parent:p,name}=getPN(ps,cwd);if(!p)return'mkdir: cannot create directory: No such file or directory';if(p.children[name])return`mkdir: cannot create directory '${name}': File exists`;p.children[name]=mkN(name,'directory');return null}
-  function rm(ps,cwd,rec=false){const{parent:p,name}=getPN(ps,cwd);if(!p||!p.children[name])return`rm: cannot remove '${ps}': No such file or directory`;if(p.children[name].type==='directory'&&!rec)return`rm: cannot remove '${ps}': Is a directory`;delete p.children[name];return null}
-  function cp(src,dst,cwd){
-    const sn=getN(src,cwd);if(!sn)return`cp: cannot stat '${src}': No such file or directory`;
-    const dn=getN(dst,cwd);const{parent:dp,name:dname}=getPN(dst,cwd);
-    function dc(n,nn){const c=mkN(nn||n.name,n.type,{content:n.content,permissions:n.permissions,owner:n.owner,group:n.group});if(n.type==='directory'&&n.children)for(const[k,v]of Object.entries(n.children))c.children[k]=dc(v);c.size=n.size;return c}
-    if(dn&&dn.type==='directory')dn.children[sn.name]=dc(sn);else if(dp)dp.children[dname]=dc(sn,dname);else return`cp: target '${dst}': No such file or directory`;return null}
-  function mv(src,dst,cwd){
-    const{parent:sp,name:sn}=getPN(src,cwd);if(!sp||!sp.children[sn])return`mv: cannot stat '${src}': No such file or directory`;
-    const srcN=sp.children[sn];const dn=getN(dst,cwd);const{parent:dp,name:dname}=getPN(dst,cwd);
-    if(dn&&dn.type==='directory')dn.children[sn]=srcN;else if(dp){dp.children[dname]=srcN;dp.children[dname].name=dname}else return`mv: target '${dst}': No such file or directory`;
-    delete sp.children[sn];return null}
-  function findN(sp,cwd,pred){
-    const sn=getN(sp,cwd);if(!sn||sn.type!=='directory')return[];const res=[];const pfx=absStr(sp,cwd);
-    function walk(n,p){if(pred(n,p))res.push(p);if(n.type==='directory'&&n.children)for(const[k,v]of Object.entries(n.children))walk(v,p==='/'?'/'+k:p+'/'+k)}
-    walk(sn,pfx==='/'?'/':pfx);return res}
-  function completions(partial,cwd){
-    if(!partial){const n=getN('.',cwd);if(!n||n.type!=='directory')return[];return Object.entries(n.children).map(([k,v])=>k+(v.type==='directory'?'/':''))}
-    const ls=partial.lastIndexOf('/');let dp,fp;
-    if(ls===-1){dp='.';fp=partial}else{dp=partial.substring(0,ls)||'/';fp=partial.substring(ls+1)}
-    const dn=getN(dp,cwd);if(!dn||dn.type!=='directory')return[];
-    const m=[];for(const[k,v]of Object.entries(dn.children)){if(k.startsWith(fp)){const pfx=ls===-1?'':(dp==='/'?'/':dp+'/');m.push(pfx+k+(v.type==='directory'?'/':''))}}return m}
-  return{root,resolve,absStr,getN,getPN,read,write,append,mkdir,rm,cp,mv,findN,completions,_mkdirp,_mkfile,mkN,now};
-})();
+const VFS = window.BrowserLinuxVFS || window.LinuxVFS;
+if (!VFS) throw new Error('BrowserLinuxVFS is not available');
 
 /* ====== PROCESS MANAGER ====== */
 const PM=(()=>{let np=1;const P=[];
@@ -331,47 +291,69 @@ const Man={
 };
 
 function manRecord(name){
-  // Try JSON manager first if available
-  if (ManManager && ManManager.exists(name)) {
-    return ManManager.getEntry(name);
+  if (ManManager && ManManager.getEntry) {
+    const entry = ManManager.getEntry(name);
+    if (entry) return `${entry.name} (${entry.section}) - ${entry.summary}`;
   }
-  // Fallback to hardcoded Man object
-  return Man[name]||null;
-}
 
-function manPage(name,section){
-  // Try JSON manager first if available
-  if (ManManager && ManManager.exists(name)) {
-    return ManManager.getPage(name, section);
-  }
-  // Fallback to hardcoded logic
-  const entry=manRecord(name);
-  if(!entry)return null;
-  if(section&&String(section)!==String(entry.section))return null;
-  const out=[];
-  out.push(`MAN(${entry.section})${entry.name.toUpperCase()}`);
-  out.push('');
-  out.push('NAME');
-  out.push(`    ${entry.name} - ${entry.summary}`);
-  out.push('');
-  out.push('SYNOPSIS');
-  out.push(`    ${entry.synopsis}`);
-  if(entry.description){out.push('');out.push('DESCRIPTION');out.push(`    ${entry.description}`)}
-  if(entry.options&&entry.options.length){out.push('');out.push('OPTIONS');for(const opt of entry.options)out.push(`    ${opt}`)}
-  if(entry.examples&&entry.examples.length){out.push('');out.push('EXAMPLES');for(const ex of entry.examples)out.push(`    $ ${ex}`)}
-  if(entry.seealso&&entry.seealso.length){out.push('');out.push('SEE ALSO');out.push(`    ${entry.seealso.join(', ')}`)}
-  return out.join('\n');
-}
-
-function manWhatis(name){
-  // Try JSON manager first if available
-  if (ManManager && ManManager.exists(name)) {
-    return ManManager.getWhatis(name);
-  }
-  // Fallback to hardcoded logic
-  const entry=manRecord(name);
-  if(!entry)return null;
+  const entry = Man[name];
+  if (!entry) return null;
   return `${entry.name} (${entry.section}) - ${entry.summary}`;
+}
+
+function manPage(name, section) {
+  if (ManManager && ManManager.getPage) {
+    const page = ManManager.getPage(name, section);
+    if (page) return page;
+  }
+
+  const entry = Man[name];
+  if (!entry) return null;
+  if (section && String(section) !== String(entry.section)) return null;
+
+  const lines = [];
+  lines.push(`${entry.name.toUpperCase()}(${entry.section})`);
+  lines.push('');
+  lines.push('NAME');
+  lines.push(`    ${entry.name} - ${entry.summary}`);
+  lines.push('');
+  lines.push('SYNOPSIS');
+  lines.push(`    ${entry.synopsis}`);
+
+  if (entry.description) {
+    lines.push('');
+    lines.push('DESCRIPTION');
+    lines.push(`    ${entry.description}`);
+  }
+
+  if (entry.options && entry.options.length) {
+    lines.push('');
+    lines.push('OPTIONS');
+    for (const option of entry.options) lines.push(`    ${option}`);
+  }
+
+  if (entry.examples && entry.examples.length) {
+    lines.push('');
+    lines.push('EXAMPLES');
+    for (const example of entry.examples) lines.push(`    $ ${example}`);
+  }
+
+  if (entry.seealso && entry.seealso.length) {
+    lines.push('');
+    lines.push('SEE ALSO');
+    lines.push(`    ${entry.seealso.join(', ')}`);
+  }
+
+  return lines.join('\n');
+}
+
+function manWhatis(name) {
+  if (ManManager && ManManager.getWhatis) {
+    const whatis = ManManager.getWhatis(name);
+    if (whatis) return whatis;
+  }
+
+  return manRecord(name);
 }
 
 function manApropos(term){
@@ -496,42 +478,9 @@ const Pipe=(()=>{
 
 /* ====== INIT FS ====== */
 function initFS(){
-  // If VFS was initialized from JSON, skip default initialization
-  if (VFSManager && VFSManager.isFromJSON()) {
-    console.log('VFS initialized from JSON manifest');
-    return;
+  if (VFS && typeof VFS.ensureBootstrapped === 'function') {
+    VFS.ensureBootstrapped();
   }
-  // Otherwise, use default hardcoded initialization
-  VFS._mkdirp('/home/user/projects');
-  VFS._mkdirp('/home/user/.config');
-  VFS._mkdirp('/home/user/.ssh');
-  VFS._mkdirp('/etc');
-  VFS._mkdirp('/var/log');
-  VFS._mkdirp('/tmp');
-  VFS._mkdirp('/usr/bin');
-  VFS._mkdirp('/usr/local/bin');
-  VFS._mkdirp('/bin');
-  VFS._mkdirp('/root');
-  VFS._mkdirp('/opt');
-  VFS._mkdirp('/dev');
-  VFS._mkfile('/home/user/notes.txt','Meeting Notes - March 2026\n==========================\n1. Project deadline moved to April 15th\n2. New team member starting next week: Sarah\n3. Budget approved for cloud infrastructure\n4. Weekly standups changed to 10:00 AM\n5. Code review process needs improvement\n6. Consider migrating to microservices\n7. Performance benchmarks due by end of month\n8. Security audit scheduled for next quarter');
-  VFS._mkfile('/home/user/todo.txt','TODO List\n---------\n[x] Set up development environment\n[x] Review pull requests\n[ ] Write unit tests for auth module\n[ ] Update API documentation\n[ ] Fix login page CSS bug\n[ ] Deploy staging environment\n[ ] Refactor database queries\n[ ] Add error handling to payment flow\n[ ] Schedule team retrospective\n[ ] Update dependencies to latest versions');
-  VFS._mkfile('/home/user/projects/app.js','const express = require(\'express\');\nconst app = express();\nconst PORT = process.env.PORT || 3000;\n\napp.use(express.json());\n\napp.get(\'/\', (req, res) => {\n  res.json({ message: \'Welcome to the API\', version: \'2.1.0\' });\n});\n\napp.get(\'/api/users\', (req, res) => {\n  res.json([\n    { id: 1, name: \'Alice\', role: \'admin\' },\n    { id: 2, name: \'Bob\', role: \'user\' },\n    { id: 3, name: \'Charlie\', role: \'moderator\' }\n  ]);\n});\n\napp.listen(PORT, () => console.log(\'Server on port \' + PORT));',{permissions:'-rwxr-xr-x'});
-  VFS._mkfile('/home/user/projects/data.json','{\n  "application": "WebLinux Demo",\n  "version": "1.0.0",\n  "database": { "host": "localhost", "port": 5432 },\n  "features": { "dark_mode": true, "notifications": true },\n  "users_count": 1547\n}');
-  VFS._mkfile('/home/user/projects/README.md','# WebLinux Project\nA browser-based Linux terminal simulator.\n## Features\n- Virtual file system\n- 50+ commands\n- Pipes and redirections\n- Process management');
-  VFS._mkfile('/home/user/projects/.gitignore','node_modules/\n.env\n*.log\ndist/\n');
-  VFS._mkfile('/home/user/projects/config.yml','server:\n  host: 0.0.0.0\n  port: 8080\n  workers: 4\nlogging:\n  level: info\n  format: json');
-  VFS._mkfile('/home/user/projects/Makefile','CC=gcc\nCFLAGS=-Wall -O2\nTARGET=app\n\nall: $(TARGET)\n\nclean:\n\trm -f *.o $(TARGET)\n\n.PHONY: all clean');
-  VFS._mkfile('/home/user/.bashrc','# ~/.bashrc\nexport PATH="/usr/local/bin:/usr/bin:/bin"\nalias ll="ls -la"\nalias la="ls -a"\n');
-  VFS._mkfile('/home/user/.profile','# ~/.profile\n[ -f ~/.bashrc ] && . ~/.bashrc\n');
-  VFS._mkfile('/home/user/.ssh/known_hosts','github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5...\n');
-  VFS._mkfile('/etc/passwd',US.getPF());
-  VFS._mkfile('/etc/hosts','127.0.0.1\tlocalhost\n127.0.1.1\tweblinux\n::1\t\tlocalhost ip6-localhost\n');
-  VFS._mkfile('/etc/hostname','weblinux');
-  VFS._mkfile('/etc/os-release','NAME="WebLinux"\nVERSION="1.0 (Jammy)"\nID=weblinux\n');
-  VFS._mkfile('/etc/resolv.conf','nameserver 8.8.8.8\nnameserver 8.8.4.4\n');
-  VFS._mkfile('/var/log/sys.log','Mar 27 08:00:01 weblinux systemd[1]: Started Daily apt download activities.\nMar 27 08:01:12 weblinux CRON[4521]: (root) CMD (test -x /usr/sbin/anacron)\nMar 27 08:15:00 weblinux kernel: [42351.234] eth0: link up, 1000Mbps full duplex\nMar 27 09:00:00 weblinux systemd[1]: Starting Cleanup of Temporary Directories...\nMar 27 09:12:44 weblinux sshd[5102]: Accepted publickey for user from 192.168.1.50\nMar 27 10:00:00 weblinux systemd[1]: Starting Daily man-db regeneration...\nMar 27 10:15:22 weblinux kernel: [49922.001] CPU0: Core temperature above threshold\nMar 27 11:00:00 weblinux rsyslogd[412]: -- MARK --\nMar 27 12:00:00 weblinux rsyslogd[412]: -- MARK --');
-  VFS._mkfile('/var/log/auth.log','Mar 27 08:00:01 weblinux sshd[1042]: Server listening on port 22\nMar 27 09:12:44 weblinux sshd[5102]: Accepted publickey for user\n');
 }
 
 

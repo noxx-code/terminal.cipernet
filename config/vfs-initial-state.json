@@ -1,90 +1,189 @@
 {
-  "version": "1.0.0",
-  "description": "Virtual File System initial state",
+  "version": "2.0.0",
+  "description": "Linux-like browser VFS initial state",
   "directories": [
-    "/home/user",
-    "/home/user/projects",
-    "/home/user/.config",
-    "/home/user/.ssh",
-    "/etc",
-    "/var/log",
-    "/tmp",
-    "/usr/bin",
-    "/usr/local/bin",
-    "/bin",
-    "/root",
-    "/opt",
-    "/dev"
+    { "path": "/", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/bin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/boot", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/dev", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/etc", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/home", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/lib", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/media", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/mnt", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/opt", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/proc", "owner": "root", "group": "root", "permissions": "dr-xr-xr-x" },
+    { "path": "/root", "owner": "root", "group": "root", "permissions": "drwx------" },
+    { "path": "/run", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/sbin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/srv", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/sys", "owner": "root", "group": "root", "permissions": "dr-xr-xr-x" },
+    { "path": "/tmp", "owner": "root", "group": "root", "permissions": "drwxrwxrwt" },
+    { "path": "/usr", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/usr/bin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/usr/lib", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/usr/sbin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/usr/share", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/var", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/var/log", "owner": "root", "group": "adm", "permissions": "drwxr-xr-x" },
+    { "path": "/var/tmp", "owner": "root", "group": "root", "permissions": "drwxrwxrwt" },
+    { "path": "/home/user", "owner": "user", "group": "user", "permissions": "drwxr-xr-x" },
+    { "path": "/home/user/projects", "owner": "user", "group": "user", "permissions": "drwxr-xr-x" },
+    { "path": "/home/user/.config", "owner": "user", "group": "user", "permissions": "drwx------" },
+    { "path": "/home/user/.ssh", "owner": "user", "group": "user", "permissions": "drwx------" }
   ],
   "files": [
     {
-      "path": "/home/user/notes.txt",
-      "content": "Meeting Notes - March 2026\n==========================\n1. Project deadline moved to April 15th\n2. New team member starting next week: Sarah\n3. Budget approved for cloud infrastructure\n4. Weekly standups changed to 10:00 AM\n5. Code review process needs improvement\n6. Consider migrating to microservices\n7. Performance benchmarks due by end of month\n8. Security audit scheduled for next quarter"
-    },
-    {
-      "path": "/home/user/todo.txt",
-      "content": "TODO List\n---------\n[x] Set up development environment\n[x] Review pull requests\n[ ] Write unit tests for auth module\n[ ] Update API documentation\n[ ] Fix login page CSS bug\n[ ] Deploy staging environment\n[ ] Refactor database queries\n[ ] Add error handling to payment flow\n[ ] Schedule team retrospective\n[ ] Update dependencies to latest versions"
-    },
-    {
-      "path": "/home/user/projects/app.js",
-      "content": "const express = require('express');\nconst app = express();\nconst PORT = process.env.PORT || 3000;\n\napp.use(express.json());\n\napp.get('/', (req, res) => {\n  res.json({ message: 'Welcome to the API', version: '2.1.0' });\n});\n\napp.get('/api/users', (req, res) => {\n  res.json([\n    { id: 1, name: 'Alice', role: 'admin' },\n    { id: 2, name: 'Bob', role: 'user' },\n    { id: 3, name: 'Charlie', role: 'moderator' }\n  ]);\n});\n\napp.listen(PORT, () => console.log('Server on port ' + PORT));",
-      "permissions": "-rwxr-xr-x"
-    },
-    {
-      "path": "/home/user/projects/data.json",
-      "content": "{\n  \"application\": \"WebLinux Demo\",\n  \"version\": \"1.0.0\",\n  \"database\": { \"host\": \"localhost\", \"port\": 5432 },\n  \"features\": { \"dark_mode\": true, \"notifications\": true },\n  \"users_count\": 1547\n}"
-    },
-    {
-      "path": "/home/user/projects/README.md",
-      "content": "# WebLinux Project\nA browser-based Linux terminal simulator.\n## Features\n- Virtual file system\n- 50+ commands\n- Pipes and redirections\n- Process management"
-    },
-    {
-      "path": "/home/user/projects/.gitignore",
-      "content": "node_modules/\n.env\n*.log\ndist/\n"
-    },
-    {
-      "path": "/home/user/projects/config.yml",
-      "content": "server:\n  host: 0.0.0.0\n  port: 8080\n  workers: 4\nlogging:\n  level: info\n  format: json"
-    },
-    {
-      "path": "/home/user/projects/Makefile",
-      "content": "CC=gcc\nCFLAGS=-Wall -O2\nTARGET=app\n\nall: $(TARGET)\n\nclean:\n\trm -f *.o $(TARGET)\n\n.PHONY: all clean"
-    },
-    {
-      "path": "/home/user/.bashrc",
-      "content": "# ~/.bashrc\nexport PATH=\"/usr/local/bin:/usr/bin:/bin\"\nalias ll=\"ls -la\"\nalias la=\"ls -a\"\n"
-    },
-    {
-      "path": "/home/user/.profile",
-      "content": "# ~/.profile\n[ -f ~/.bashrc ] && . ~/.bashrc\n"
-    },
-    {
-      "path": "/home/user/.ssh/known_hosts",
-      "content": "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5...\n"
-    },
-    {
-      "path": "/etc/hosts",
-      "content": "127.0.0.1\tlocalhost\n127.0.1.1\tweblinux\n::1\t\tlocalhost ip6-localhost\n"
+      "path": "/etc/passwd",
+      "owner": "root",
+      "group": "root",
+      "permissions": "-rw-r--r--",
+      "content": "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:User:/home/user:/bin/bash\n"
     },
     {
       "path": "/etc/hostname",
+      "owner": "root",
+      "group": "root",
+      "permissions": "-rw-r--r--",
       "content": "weblinux"
     },
     {
-      "path": "/etc/os-release",
-      "content": "NAME=\"WebLinux\"\nVERSION=\"1.0 (Jammy)\"\nID=weblinux\n"
+      "path": "/etc/hosts",
+      "owner": "root",
+      "group": "root",
+      "permissions": "-rw-r--r--",
+      "content": "127.0.0.1 localhost\n127.0.1.1 weblinux\n::1 localhost ip6-localhost ip6-loopback\n"
     },
     {
-      "path": "/etc/resolv.conf",
-      "content": "nameserver 8.8.8.8\nnameserver 8.8.4.4\n"
+      "path": "/etc/bashrc",
+      "owner": "root",
+      "group": "root",
+      "permissions": "-rw-r--r--",
+      "content": "# /etc/bashrc\nexport PS1=\"\\u@\\h:\\w$ \"\n"
     },
     {
-      "path": "/var/log/sys.log",
-      "content": "Mar 27 08:00:01 weblinux systemd[1]: Started Daily apt download activities.\nMar 27 08:01:12 weblinux CRON[4521]: (root) CMD (test -x /usr/sbin/anacron)\nMar 27 08:15:00 weblinux kernel: [42351.234] eth0: link up, 1000Mbps full duplex\nMar 27 09:00:00 weblinux systemd[1]: Starting Cleanup of Temporary Directories...\nMar 27 09:12:44 weblinux sshd[5102]: Accepted publickey for user from 192.168.1.50\nMar 27 10:00:00 weblinux systemd[1]: Starting Daily man-db regeneration...\nMar 27 10:15:22 weblinux kernel: [49922.001] CPU0: Core temperature above threshold\nMar 27 11:00:00 weblinux rsyslogd[412]: -- MARK --\nMar 27 12:00:00 weblinux rsyslogd[412]: -- MARK --"
+      "path": "/home/user/.bashrc",
+      "owner": "user",
+      "group": "user",
+      "permissions": "-rw-r--r--",
+      "content": "# ~/.bashrc\nexport PATH=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\nalias ll=\"ls -la\"\nalias la=\"ls -a\"\n"
+    },
+    {
+      "path": "/home/user/.profile",
+      "owner": "user",
+      "group": "user",
+      "permissions": "-rw-r--r--",
+      "content": "# ~/.profile\n[ -f ~/.bashrc ] && . ~/.bashrc\n"
+    },
+    {
+      "path": "/home/user/notes.txt",
+      "owner": "user",
+      "group": "user",
+      "permissions": "-rw-r--r--",
+      "content": "Learning sandbox notes.\nUse pwd, ls, cd, cat, touch, mkdir, and rm to explore.\n"
+    },
+    {
+      "path": "/home/user/todo.txt",
+      "owner": "user",
+      "group": "user",
+      "permissions": "-rw-r--r--",
+      "content": "TODO\n- Learn path resolution\n- Practice directory traversal\n- Inspect /proc runtime files\n"
+    },
+    {
+      "path": "/home/user/projects/README.md",
+      "owner": "user",
+      "group": "user",
+      "permissions": "-rw-r--r--",
+      "content": "# Browser Linux Sandbox\nThis directory is for practice projects inside the virtual filesystem.\n"
+    },
+    {
+      "path": "/home/user/projects/app.js",
+      "owner": "user",
+      "group": "user",
+      "permissions": "-rwxr-xr-x",
+      "content": "console.log('Hello from the virtual filesystem');\n"
+    },
+    {
+      "path": "/home/user/projects/data.json",
+      "owner": "user",
+      "group": "user",
+      "permissions": "-rw-r--r--",
+      "content": "{\n  \"app\": \"virtual-sandbox\",\n  \"version\": \"1.0.0\"\n}\n"
+    },
+    {
+      "path": "/var/log/syslog",
+      "owner": "root",
+      "group": "adm",
+      "permissions": "-rw-r-----",
+      "content": "Jan 01 00:00:01 weblinux kernel: Virtual kernel booted successfully\nJan 01 00:00:02 weblinux systemd[1]: Started browser runtime services\n"
     },
     {
       "path": "/var/log/auth.log",
-      "content": "Mar 27 08:00:01 weblinux sshd[1042]: Server listening on port 22\nMar 27 09:12:44 weblinux sshd[5102]: Accepted publickey for user\n"
+      "owner": "root",
+      "group": "adm",
+      "permissions": "-rw-r-----",
+      "content": "Jan 01 00:00:03 weblinux sshd[100]: Accepted key for user from 127.0.0.1\n"
+    }
+  ],
+  "virtualFiles": [
+    {
+      "path": "/proc/version",
+      "owner": "root",
+      "group": "root",
+      "permissions": "-r--r--r--",
+      "generator": "proc.version",
+      "kind": "runtime",
+      "readOnly": true
+    },
+    {
+      "path": "/proc/meminfo",
+      "owner": "root",
+      "group": "root",
+      "permissions": "-r--r--r--",
+      "generator": "proc.meminfo",
+      "kind": "runtime",
+      "readOnly": true
+    },
+    {
+      "path": "/proc/cpuinfo",
+      "owner": "root",
+      "group": "root",
+      "permissions": "-r--r--r--",
+      "generator": "proc.cpuinfo",
+      "kind": "runtime",
+      "readOnly": true
+    }
+  ],
+  "devices": [
+    {
+      "path": "/dev/null",
+      "owner": "root",
+      "group": "root",
+      "permissions": "crw-rw-rw-",
+      "generator": "device.null",
+      "device": "null",
+      "kind": "device",
+      "readOnly": false
+    },
+    {
+      "path": "/dev/random",
+      "owner": "root",
+      "group": "root",
+      "permissions": "crw-rw-rw-",
+      "generator": "device.random",
+      "device": "random",
+      "kind": "device",
+      "readOnly": false
+    },
+    {
+      "path": "/dev/tty",
+      "owner": "user",
+      "group": "tty",
+      "permissions": "crw-rw-rw-",
+      "generator": "device.tty",
+      "device": "tty",
+      "kind": "device",
+      "readOnly": false
     }
   ]
 }
