@@ -199,6 +199,19 @@ body.login-complete .login-screen {
   animation: login-log-in 360ms ease forwards;
 }
 
+/* Center boot messages horizontally only */
+.login-screen .login-boot {
+  margin-left: auto;
+  margin-right: auto;
+  text-align: center;
+  width: min(760px, calc(100% - 40px));
+}
+
+.login-screen .login-boot .login-boot-line {
+  display: block;
+  margin: 6px auto;
+}
+
 .login-panel {
   width: min(560px, 100%);
   margin: 0 auto;

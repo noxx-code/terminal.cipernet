@@ -92,11 +92,9 @@ const WebLinuxAuth = (() => {
 /* ====== LOGIN SCREEN ====== */
 const LoginScreen = (() => {
   const bootLines = [
-    '[ 0.001204] weblinux: loading browser-native tty1',
-    '[ 0.082613] weblinux: mounting sandboxed filesystem',
-    '[ 0.164905] matrix: enabling phosphor display pipeline',
-    '[ 0.248330] tty1: ready for local authentication',
-    '[ 0.329744] weblinux: secure terminal runtime online'
+    'Boot Into the Browser Shell',
+    'Lightweight Linux Simulation',
+    'Built for Learning and Exploration'
   ];
   const reducedMotion = typeof window.matchMedia === 'function'
     && window.matchMedia('(prefers-reduced-motion: reduce)').matches;

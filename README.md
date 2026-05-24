@@ -1,84 +1,73 @@
-# 🖥️ Terminal — Bash Emulator (Web)
+# WEBLINUX — Browser Terminal Emulator (v1.3)
 
-A lightweight, browser-based **Bash terminal emulator** built with **HTML, CSS, and JavaScript**.
+A lightweight, browser-native terminal emulator that simulates a Bash-like experience in the browser. Designed for demos, learning, and UI exploration — not a real shell.
 
-> ⚠️ This is NOT a real shell. It does NOT execute actual system commands — it only simulates a terminal-like experience.
+> ⚠️ SECURITY NOTE: This project simulates a terminal UI only. It does not execute system-level commands or access the host filesystem.
 
 ---
 
-## 🌐 Live Demo
+## Live demo
 
 https://terminal.ciphernet.org
 
 ---
 
-## 📦 Project Overview
+## Quick start
 
-**Terminal** is a front-end project that mimics the look and feel of a Bash terminal.  
-It provides a command-line interface simulation directly in the browser.
-
-### Key Points:
-- Runs entirely in the browser
-- No backend or real shell access
-- Safe and sandboxed
-- Designed for UI/UX, demos, and learning
-
----
-
-## 🚀 Features
-
-- Terminal-style interface  
-- Command input simulation  
-- Output rendering (predefined responses)  
-- Styled to resemble a real Bash terminal  
-- Lightweight and fast  
-
----
-
-## ⚙️ Tech Stack
-
-- HTML  
-- CSS  
-- JavaScript  
-
----
-
-## ❗ Limitations
-
-- No real command execution  
-- No system or filesystem access  
-- Commands are hardcoded / simulated  
-- Not an actual Bash environment  
-
----
-
-## 📁 Installation / Usage
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/noxx-code/terminal.cipernet.git
 cd terminal.cipernet
 ```
 
-Run the project by opening `index.html` in a browser.
+2. Open `index.html` in a modern browser (Chrome, Firefox, Edge).
 
-## 🗂️ Project Structure
+For a simple local web server (recommended for some browsers):
 
-```text
+```bash
+# Python 3
+python -m http.server 3000
+# then open http://localhost:3000
+```
+
+---
+
+## What it is
+
+- Browser-only terminal emulator built with vanilla HTML/CSS/JS
+- Command responses are simulated; commands do not run on your machine
+- Lightweight, minimal dependencies, easy to fork and customize
+
+---
+
+## Features
+
+- Styled terminal UI with CRT/matrix visual effects
+- Command parsing and simulated command table
+- Virtual filesystem (VFS) seeded from JSON manifests
+- Simple in-browser `nano`-style editor overlay
+- Boot/login screen with a cinematic visual theme
+
+---
+
+## Project layout
+
+```
 terminal.cipernet/
 ├─ assets/
 │  ├─ images/
-│  │  └─ favicon.png
 │  └─ styles/
-│     └─ styles.css
 ├─ config/
 │  ├─ commands-manifest.json
 │  ├─ manual-pages.json
 │  └─ vfs-initial-state.json
 ├─ core/
-│  ├─ inputManager.js
-│  └─ script.js
+│  ├─ inputManager.js    # keyboard/input handling
+│  ├─ nanoEditor.js      # in-browser nano-like editor
+│  └─ script.js          # terminal runtime + boot/login logic
 ├─ managers/
-│  ├─ commandManager.js
+│  ├─ commandManager.js  # command implementations
 │  ├─ manManager.js
 │  └─ vfsManager.js
 ├─ utils/
@@ -88,46 +77,40 @@ terminal.cipernet/
 └─ LICENSE
 ```
 
-## 🧩 Folder Roles
+---
 
-- `core`: Main terminal runtime logic and input behavior.
-- `utils`: Shared helper modules used by other layers.
-- `managers`: Data/domain managers for commands, man pages, and VFS initialization.
-- `config`: JSON manifests used at runtime.
-- `assets`: Static UI assets such as styles and images.
+## Nano editor (in-browser)
 
-## 🔄 Runtime Load Order
+The project includes a small overlay editor inspired by `nano`.
 
-The page loads scripts in this order to preserve dependencies:
+- Open with: `nano <path>` (e.g., `nano hello.txt`)
+- Shortcuts:
+  - `Ctrl+O` — Save to virtual filesystem
+  - `Ctrl+X` — Exit editor
+  - `Ctrl+G` — Help
 
-1. `utils/jsonLoader.js`
-2. `managers/commandManager.js`
-3. `managers/manManager.js`
-4. `managers/vfsManager.js`
-5. `core/inputManager.js`
-6. `core/script.js`
+The editor operates on the project's virtual filesystem and does not modify files on your host disk.
 
 ---
 
-## 📝 Nano-like Editor (new)
+## Development notes
 
-A minimal, in-browser, overlay-based text editor (inspired by `nano`) was added to the terminal emulator.
+- Scripts are loaded in order (see `index.html`) to preserve dependencies.
+- Most runtime configuration lives under `config/` as JSON manifests.
+- The fake authentication and login flow are implemented in `core/script.js` and are intentionally client-side.
 
-- **How to open:** Run `nano <path>` in the terminal, for example `nano hello.txt`.
-- **Shortcuts:**
-	- **Ctrl+O** — Save current buffer to the virtual filesystem (VFS).
-	- **Ctrl+X** — Exit the editor (you can save before exit with Ctrl+O).
-	- **Ctrl+G** — Open the editor help overlay with these shortcuts.
-- **Notes:**
-	- The editor uses the project's virtual filesystem (VFS) and does not write to your real disk.
-	- The editor implementation lives at `core/nanoEditor.js`.
-	- A manual page entry is available via `man nano` (reads from `config/manual-pages.json`).
+---
 
-### Quick test
+## Contributing
 
-1. Open `index.html` in a browser.
-2. Type `nano test.txt` and press Enter.
-3. Type some text into the editor, press **Ctrl+O** to save, then **Ctrl+X** to exit.
-4. Back in the terminal you can view the file (if `cat` is implemented) or re-open with `nano test.txt`.
+Contributions are welcome. Suggested starter tasks:
 
-If you want, I can also add a short entry to a `CHANGELOG.md` or run a quick browser verification checklist.
+- Add more simulated commands under `managers/commandManager.js`
+- Extend the VFS seed data in `config/vfs-initial-state.json`
+- Improve accessibility and keyboard handling in `core/inputManager.js`
+
+Please open issues or PRs against the `main` branch.
+
+---
+
+If you want, I can also add a short `CHANGELOG.md`, contributor guide, or update the demo link to a different host. Tell me what to include next.
