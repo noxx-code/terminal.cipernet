@@ -18,6 +18,7 @@
 function updateStatusCwd(cwd) {
   const cwdElement = document.getElementById('status-cwd');
   const titleBarElement = document.querySelector('.title-bar-title');
+  const sessionUser = window.weblinuxSessionUser || 'user';
 
   let displayPath = cwd;
   if (displayPath.startsWith('/home/user')) displayPath = `~${displayPath.slice(10)}`;
@@ -25,9 +26,324 @@ function updateStatusCwd(cwd) {
 
   if (cwdElement) cwdElement.textContent = displayPath;
   if (titleBarElement) {
-    titleBarElement.innerHTML = `user@weblinux <span>${displayPath}</span> <span>— bash</span>`;
+    titleBarElement.innerHTML = `${sessionUser}@weblinux <span>${displayPath}</span> <span>— bash</span>`;
   }
 }
+
+window.__weblinuxLoginComplete = false;
+window.weblinuxSessionUser = window.weblinuxSessionUser || 'user';
+window.__weblinuxInputManager = null;
+window.__weblinuxTerminalState = null;
+
+const WebLinuxAuth = (() => {
+  const STORAGE_KEY = 'weblinux.auth';
+
+  function readRecord() {
+    try {
+      const raw = window.sessionStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return {
+        username: typeof parsed.username === 'string' ? parsed.username : 'user',
+        password: typeof parsed.password === 'string' ? parsed.password : '',
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeRecord(username, password) {
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        username: username || 'user',
+        password: password || '',
+      }));
+    } catch (error) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function getPassword() {
+    const record = readRecord();
+    return record ? record.password : '';
+  }
+
+  function getUsername() {
+    const record = readRecord();
+    return record ? record.username : (window.weblinuxSessionUser || 'user');
+  }
+
+  function verifyPassword(candidate) {
+    return !!candidate && candidate === getPassword();
+  }
+
+  return {
+    readRecord,
+    writeRecord,
+    getPassword,
+    getUsername,
+    verifyPassword,
+  };
+})();
+
+/* ====== LOGIN SCREEN ====== */
+const LoginScreen = (() => {
+  const bootLines = [
+    '[ 0.001204] weblinux: loading browser-native tty1',
+    '[ 0.082613] weblinux: mounting sandboxed filesystem',
+    '[ 0.164905] matrix: enabling phosphor display pipeline',
+    '[ 0.248330] tty1: ready for local authentication',
+    '[ 0.329744] weblinux: secure terminal runtime online'
+  ];
+  const reducedMotion = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let running = false;
+  let matrixAnimationId = 0;
+  let bootTimerId = 0;
+
+  function setStatus(statusElement, text, state = 'idle') {
+    if (!statusElement) return;
+    statusElement.textContent = text;
+    statusElement.dataset.state = state;
+  }
+
+  function appendBootLine(bootElement, text) {
+    if (!bootElement) return;
+
+    const lineElement = document.createElement('div');
+    lineElement.className = 'login-boot-line';
+    lineElement.textContent = text;
+    bootElement.appendChild(lineElement);
+  }
+
+  function buildMatrixState(canvas) {
+    const context = canvas.getContext('2d');
+    const state = {
+      canvas,
+      context,
+      width: 0,
+      height: 0,
+      columns: [],
+      fontSize: 16,
+      glyphs: '01#/\\[]{}<>|.:;*+abcdefghijklmnopqrstuvwxyz',
+    };
+
+    function resize() {
+      const scale = Math.min(window.devicePixelRatio || 1, 2);
+      state.width = canvas.clientWidth || window.innerWidth;
+      state.height = canvas.clientHeight || window.innerHeight;
+      canvas.width = Math.floor(state.width * scale);
+      canvas.height = Math.floor(state.height * scale);
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      state.fontSize = Math.max(12, Math.round(Math.min(state.width / 96, 18)));
+      const columnCount = Math.max(1, Math.floor(state.width / (state.fontSize * 0.9)));
+      state.columns = new Array(columnCount).fill(0).map((_, index) => ({
+        x: index * state.fontSize * 0.9,
+        y: Math.random() * state.height,
+        speed: 0.8 + Math.random() * 2.1,
+        length: 8 + Math.floor(Math.random() * 18),
+      }));
+    }
+
+    function draw() {
+      if (!running) return;
+
+      context.fillStyle = 'rgba(0, 0, 0, 0.14)';
+      context.fillRect(0, 0, state.width, state.height);
+      context.font = `${state.fontSize}px 'JetBrains Mono', 'IBM Plex Mono', monospace`;
+      context.textAlign = 'left';
+      context.textBaseline = 'top';
+
+      for (const column of state.columns) {
+        const headX = column.x;
+        const headY = column.y;
+
+        for (let i = 0; i < column.length; i++) {
+          const alpha = Math.max(0, 1 - (i / column.length));
+          context.fillStyle = `rgba(124, 255, 138, ${0.08 + (alpha * 0.82)})`;
+          const glyph = state.glyphs[Math.floor(Math.random() * state.glyphs.length)];
+          context.fillText(glyph, headX, headY - (i * state.fontSize * 1.02));
+        }
+
+        column.y += column.speed * (reducedMotion ? 0.35 : 1);
+        if (column.y - column.length * state.fontSize > state.height + 40) {
+          column.y = -Math.random() * state.height * 0.45;
+          column.speed = 0.8 + Math.random() * 2.1;
+          column.length = 8 + Math.floor(Math.random() * 18);
+        }
+      }
+
+      matrixAnimationId = window.requestAnimationFrame(draw);
+    }
+
+    resize();
+    return { resize, draw };
+  }
+
+  function revealTerminal(username) {
+    const terminalElement = document.getElementById('terminal');
+    const terminalInput = document.getElementById('terminal-input');
+    const inputManager = window.__weblinuxInputManager;
+    const terminalState = window.__weblinuxTerminalState;
+
+    window.weblinuxSessionUser = username || 'user';
+
+    if (terminalElement) terminalElement.innerHTML = '';
+
+    if (terminalState) {
+      terminalState.input = '';
+      terminalState.cursor = 0;
+      terminalState.user = window.weblinuxSessionUser;
+      if (typeof updateStatusCwd === 'function') updateStatusCwd(terminalState.cwd);
+    }
+
+    if (terminalElement) {
+      const loginLine = document.createElement('div');
+      loginLine.className = 'output-line';
+      loginLine.textContent = `Last login: ${new Date().toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })} on tty1`;
+      terminalElement.appendChild(loginLine);
+
+      const bannerLine = document.createElement('div');
+      bannerLine.className = 'output-line';
+      bannerLine.innerHTML = '<span style="color:#7bebb2;font-weight:700;">WEBLINUX v1.3</span> <span style="color:#5a6270;">·</span> browser-native Linux runtime .. enter to continue';
+      terminalElement.appendChild(bannerLine);
+    }
+
+    if (typeof inputManager?.setEnabled === 'function') {
+      inputManager.setEnabled(true);
+    } else if (terminalInput) {
+      terminalInput.disabled = false;
+    }
+
+    if (typeof inputManager?.focus === 'function') {
+      inputManager.focus();
+    } else if (terminalInput) {
+      terminalInput.focus({ preventScroll: true });
+    }
+
+    if (terminalElement) {
+      terminalElement.scrollTop = terminalElement.scrollHeight;
+    }
+  }
+
+  function completeLogin(screenElement, username, password) {
+    if (window.__weblinuxLoginComplete) return;
+
+    const loginStatus = document.getElementById('login-status');
+    setStatus(loginStatus, 'Authentication accepted. Switching tty1...', 'idle');
+
+    WebLinuxAuth.writeRecord(username, password);
+    window.__weblinuxLoginComplete = true;
+    running = false;
+    if (matrixAnimationId) window.cancelAnimationFrame(matrixAnimationId);
+    document.body.classList.remove('login-booting');
+    document.body.classList.add('login-complete');
+
+    if (screenElement) {
+      screenElement.setAttribute('aria-hidden', 'true');
+      screenElement.classList.add('login-screen--exit');
+    }
+
+    window.setTimeout(() => {
+      if (screenElement) screenElement.hidden = true;
+      revealTerminal(username);
+    }, 420);
+  }
+
+  function init() {
+    const screenElement = document.getElementById('login-screen');
+    const bootElement = document.getElementById('login-boot');
+    const loginForm = document.getElementById('login-form');
+    const usernameInput = document.getElementById('login-username');
+    const passwordInput = document.getElementById('login-password');
+    const statusElement = document.getElementById('login-status');
+    const matrixCanvas = document.getElementById('login-matrix');
+
+    if (!screenElement || !bootElement || !loginForm || !usernameInput || !passwordInput || !statusElement) return null;
+
+    if (matrixCanvas && typeof matrixCanvas.getContext === 'function') {
+      const matrixState = buildMatrixState(matrixCanvas);
+      running = true;
+
+      if (!reducedMotion) {
+        const startMatrix = () => {
+          matrixState.draw();
+        };
+
+        startMatrix();
+        window.addEventListener('resize', matrixState.resize, { passive: true });
+      }
+    }
+
+    const bootSequence = reducedMotion ? bootLines.slice(0, 2) : bootLines;
+    let bootIndex = 0;
+
+    const runBoot = () => {
+      appendBootLine(bootElement, bootSequence[bootIndex]);
+      bootIndex += 1;
+
+      if (bootIndex < bootSequence.length) {
+        bootTimerId = window.setTimeout(runBoot, reducedMotion ? 220 : 160);
+      } else {
+        setStatus(statusElement, 'Waiting for authentication.', 'idle');
+        window.setTimeout(() => usernameInput.focus({ preventScroll: true }), reducedMotion ? 120 : 240);
+      }
+    };
+
+    loginForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const username = usernameInput.value.trim() || 'user';
+      const password = passwordInput.value;
+
+      if (!password) {
+        setStatus(statusElement, 'Password required.', 'error');
+        passwordInput.focus({ preventScroll: true });
+        return;
+      }
+
+      setStatus(statusElement, 'Verifying credentials...', 'idle');
+      window.setTimeout(() => completeLogin(screenElement, username, password), 520);
+    });
+
+    usernameInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        passwordInput.focus({ preventScroll: true });
+      }
+    });
+
+    passwordInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        loginForm.requestSubmit();
+      }
+    });
+
+    runBoot();
+
+    return {
+      destroy() {
+        running = false;
+        window.clearTimeout(bootTimerId);
+        window.cancelAnimationFrame(matrixAnimationId);
+      }
+    };
+  }
+
+  return { init };
+})();
 
 /* ====== TERMINAL FITTING ====== */
 const TerminalFit = (() => {
@@ -412,10 +728,10 @@ C.df=(args)=>{const h=args.includes('-h');return'Filesystem      Size  Used Avai
 C.du=(args,s)=>{const h=args.includes('-h'),sm=args.includes('-s'),t=args.find(a=>!a.startsWith('-'))||'.';const n=VFS.getN(t,s.cwd);if(!n)return`du: '${t}': No such file`;function sz(nd){if(nd.type==='file')return nd.size||0;let tot=4096;if(nd.children)for(const c of Object.values(nd.children))tot+=sz(c);return tot}if(sm){const size=sz(n);return h?`${(size/1024).toFixed(0)}K\t${t}`:`${size}\t${t}`}const r=[];function walk(nd,p){if(nd.type==='directory'){let size=4096;if(nd.children)for(const[k,v]of Object.entries(nd.children)){walk(v,p+'/'+k);size+=sz(v)}r.push(h?`${(size/1024).toFixed(0)}K\t${p}`:`${size}\t${p}`)}}walk(n,t);return r.join('\n')};
 C.free=(args)=>args.includes('-h')?'              total        used        free      shared  buff/cache   available\nMem:          7.7Gi       2.1Gi       3.8Gi       256Mi       1.8Gi       5.1Gi\nSwap:         2.0Gi          0B       2.0Gi':'              total        used        free      shared  buff/cache   available\nMem:        8052736     2202624     3985408      262144     1864704     5373952\nSwap:       2097152           0     2097152';
 C.uname=(args)=>{if(args.includes('-a'))return'Linux weblinux 6.5.0-generic #1 SMP x86_64 GNU/Linux';if(args.includes('-r'))return'6.5.0-generic';return'Linux'};
-C.whoami=()=>US.cur();
-C.who=()=>{const d=new Date();return`user     pts/0        ${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} (web-terminal)`};
+C.whoami=(args,s)=>s&&s.isRoot?'root':US.cur();
+C.who=(args,s)=>{const d=new Date();const user=s&&s.isRoot?'root':'user';return`${user}     pts/0        ${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} (web-terminal)`};
 C.hostname=()=>'weblinux';
-C.id=()=>'uid=1000(user) gid=1000(user) groups=1000(user),27(sudo)';
+C.id=(args,s)=>s&&s.isRoot?'uid=0(root) gid=0(root) groups=0(root),27(sudo)':'uid=1000(user) gid=1000(user) groups=1000(user),27(sudo)';
 C.sort=(args,s,stdin)=>{let rev=false,num=false,uniq=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r'))rev=true;if(a.includes('n'))num=true;if(a.includes('u'))uniq=true}else files.push(a)}let text='';if(files.length){for(const f of files){const c=VFS.read(f,s.cwd);if(c===null)return`sort: ${f}: No such file`;text+=(text?'\n':'')+c}}else if(stdin!=null)text=stdin;else return'';let l=text.split('\n');if(num)l.sort((a,b)=>parseFloat(a)-parseFloat(b));else l.sort();if(rev)l.reverse();if(uniq)l=[...new Set(l)];return l.join('\n')};
 C.uniq=(args,s,stdin)=>{let cm=false,dm=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('c'))cm=true;if(a.includes('d'))dm=true}else files.push(a)}let text='';if(files.length){const c=VFS.read(files[0],s.cwd);if(c===null)return`uniq: ${files[0]}: No such file`;text=c}else if(stdin!=null)text=stdin;else return'';const lines=text.split('\n');const r=[];let prev=null,count=0;for(const line of lines){if(line===prev)count++;else{if(prev!==null&&(!dm||count>1))r.push(cm?`${String(count).padStart(7)} ${prev}`:prev);prev=line;count=1}}if(prev!==null&&(!dm||count>1))r.push(cm?`${String(count).padStart(7)} ${prev}`:prev);return r.join('\n')};
 C.wc=(args,s,stdin)=>{let lf=false,wf=false,cf=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('l'))lf=true;if(a.includes('w'))wf=true;if(a.includes('c'))cf=true}else files.push(a)}const all=!lf&&!wf&&!cf;function cnt(t,nm){const l=t.split('\n').length;const w=t.split(/\s+/).filter(Boolean).length;const ch=t.length;const p=[];if(all||lf)p.push(String(l).padStart(6));if(all||wf)p.push(String(w).padStart(6));if(all||cf)p.push(String(ch).padStart(6));if(nm)p.push(' '+nm);return p.join('')}if(!files.length){if(stdin==null)return'wc: missing operand';return cnt(stdin,'')}const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`wc: ${f}: No such file`);continue}r.push(cnt(c,f))}return r.join('\n')};
@@ -429,7 +745,7 @@ C.history=(a,s)=>s.history.map((h,i)=>`  ${String(i+1).padStart(4)}  ${h}`).join
 C.clear=()=>'\x1b[CLEAR]';
 C.date=()=>new Date().toString();
 C.cal=()=>{const now=new Date(),y=now.getFullYear(),m=now.getMonth();const mo=['January','February','March','April','May','June','July','August','September','October','November','December'];let cal=`    ${mo[m]} ${y}\nSu Mo Tu We Th Fr Sa\n`;const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();let line='   '.repeat(fd);for(let d=1;d<=dim;d++){const ds=d===now.getDate()?`\x1b[7m${String(d).padStart(2)}\x1b[0m`:String(d).padStart(2);line+=ds;if((fd+d)%7===0){cal+=line+'\n';line=''}else line+=' '}if(line.trim())cal+=line;return cal};
-C.echo=(args,s)=>{let start=0;if(args[0]==='-n')start=1;let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,'/home/user').replace(/\$USER/g,US.cur()).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');text=text.replace(/^"(.*)"$/s,'$1').replace(/^'(.*)'$/s,'$1');return text};
+C.echo=(args,s)=>{let start=0;if(args[0]==='-n')start=1;const currentUser=s&&s.isRoot?'root':US.cur();const currentHome=s&&s.isRoot?'/root':'/home/user';let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,currentHome).replace(/\$USER/g,currentUser).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');text=text.replace(/^"(.*)"$/s,'$1').replace(/^'(.*)'$/s,'$1');return text};
 C.man=(args)=>{
   if(!args.length)return"What manual page do you want?\nTry 'man man'.";
   if(args[0]==='-f'||args[0]==='--whatis')return args[1]?manWhatis(args[1])||`No manual entry for ${args[1]}`:'whatis: what manual page do you want?';
@@ -446,7 +762,7 @@ C.man=(args)=>{
   const page=manPage(target,section);
   return page||`No manual entry for ${target}${section?` in section ${section}`:''}`;
 };
-C.env=(a,s)=>`HOME=/home/user\nUSER=${US.cur()}\nSHELL=/bin/bash\nPWD=${s.cwd}\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nHOSTNAME=weblinux\nTERM=xterm-256color\nLANG=en_US.UTF-8`;
+C.env=(a,s)=>`HOME=${s&&s.isRoot?'/root':'/home/user'}\nUSER=${s&&s.isRoot?'root':US.cur()}\nSHELL=/bin/bash\nPWD=${s.cwd}\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nHOSTNAME=weblinux\nTERM=xterm-256color\nLANG=en_US.UTF-8`;
 C.export=()=>'';C.alias=()=>'';
 C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
 C.sudo=(args,s,stdin)=>{if(!args.length)return'usage: sudo command';if(C[args[0]])return C[args[0]](args.slice(1),s,stdin);return`sudo: ${args[0]}: command not found`};
@@ -490,6 +806,7 @@ function initFS(){
   initializeJSONManagers().catch(err => console.warn('JSON managers initialization error:', err));
 
   initFS();
+  LoginScreen.init();
   const terminalElement = document.getElementById('terminal');
   const terminalInput = document.getElementById('terminal-input');
   let inputManager = null;
@@ -501,6 +818,14 @@ function initFS(){
     input: '',
     cursor: 0,
     saved: '',
+    user: window.weblinuxSessionUser || 'user',
+    isRoot: false,
+    sudo: {
+      active: false,
+      command: '',
+      attempts: 0,
+      cacheUntil: 0,
+    },
   };
   const scheduleTerminalFit = () => TerminalFit.schedule(terminalElement);
 
@@ -519,6 +844,52 @@ function initFS(){
     document.body.classList.toggle('nano-active', terminalMode === 'nano');
   }
 
+  function executeCommand(command, options = {}) {
+    const previousRootState = terminalState.isRoot;
+    if (typeof options.isRoot === 'boolean') {
+      terminalState.isRoot = options.isRoot;
+    }
+
+    try {
+      return Pipe.execute(command, terminalState);
+    } finally {
+      terminalState.isRoot = previousRootState;
+    }
+  }
+
+  function startSudoPrompt(command) {
+    terminalState.sudo.active = true;
+    terminalState.sudo.command = command;
+    terminalState.sudo.attempts = 0;
+    terminalState.input = '';
+    terminalState.cursor = 0;
+    terminalState.saved = '';
+    renderInput();
+    scrollToBottom();
+    if (inputManager) inputManager.focus();
+  }
+
+  function cancelSudoPrompt(message) {
+    terminalState.sudo.active = false;
+    terminalState.sudo.command = '';
+    terminalState.sudo.attempts = 0;
+    terminalState.input = '';
+    terminalState.cursor = 0;
+    terminalState.saved = '';
+    if (message) writeLine(message);
+    renderInput();
+    scrollToBottom();
+  }
+
+  function finishSudoPrompt() {
+    terminalState.sudo.active = false;
+    terminalState.sudo.command = '';
+    terminalState.sudo.attempts = 0;
+    terminalState.input = '';
+    terminalState.cursor = 0;
+    terminalState.saved = '';
+  }
+
   // Re-fit when output changes so long lines stay visible without clipping.
   const mutationObserver = new MutationObserver(() => scheduleTerminalFit());
   mutationObserver.observe(terminalElement, { childList: true, subtree: true, characterData: true });
@@ -527,11 +898,18 @@ function initFS(){
   window.addEventListener('orientationchange', scheduleTerminalFit, { passive: true });
 
   function buildPromptHtml() {
+    const sessionUser = terminalState.user || window.weblinuxSessionUser || 'user';
+
+    if (terminalState.sudo.active) {
+      return `<span class="prompt-user">[sudo]</span><span class="prompt-host"> password for ${escapeHtml(sessionUser)}</span><span class="prompt-sym">:</span><span class="prompt-dollar"> </span>`;
+    }
+
     let displayPath = terminalState.cwd;
     if (displayPath.startsWith('/home/user')) displayPath = `~${displayPath.slice(10)}`;
     if (!displayPath) displayPath = '~';
+    const promptSymbol = terminalState.isRoot ? '#' : '$';
 
-    return `<span class="prompt-user">user</span><span class="prompt-host">@weblinux</span><span class="prompt-sym">:</span><span class="prompt-path">${displayPath}</span><span class="prompt-dollar">$ </span>`;
+    return `<span class="prompt-user">${escapeHtml(sessionUser)}</span><span class="prompt-host">@weblinux</span><span class="prompt-sym">:</span><span class="prompt-path">${displayPath}</span><span class="prompt-dollar">${promptSymbol} </span>`;
   }
 
   function escapeHtml(value) {
@@ -547,13 +925,19 @@ function initFS(){
       terminalElement.appendChild(inputLineElement);
     }
 
-    const beforeCursor = escapeHtml(terminalState.input.slice(0, terminalState.cursor));
-    const cursorCharacter = terminalState.cursor < terminalState.input.length
-      ? escapeHtml(terminalState.input[terminalState.cursor])
-      : ' ';
-    const afterCursor = terminalState.cursor < terminalState.input.length
-      ? escapeHtml(terminalState.input.slice(terminalState.cursor + 1))
-      : '';
+    const isPasswordPrompt = terminalState.sudo.active;
+    const visibleInput = isPasswordPrompt ? '•'.repeat(terminalState.input.length) : terminalState.input;
+    const beforeCursor = escapeHtml(visibleInput.slice(0, terminalState.cursor));
+    const cursorCharacter = isPasswordPrompt
+      ? ' '
+      : (terminalState.cursor < terminalState.input.length
+        ? escapeHtml(terminalState.input[terminalState.cursor])
+        : ' ');
+    const afterCursor = isPasswordPrompt
+      ? ''
+      : (terminalState.cursor < terminalState.input.length
+        ? escapeHtml(terminalState.input.slice(terminalState.cursor + 1))
+        : '');
 
     inputLineElement.innerHTML = buildPromptHtml() + beforeCursor + '<span class="cursor-char cursor-blink">' + cursorCharacter + '</span>' + afterCursor;
     scheduleTerminalFit();
@@ -584,6 +968,52 @@ function initFS(){
 
   function submitInput() {
     const input = terminalState.input;
+
+    if (terminalState.sudo.active) {
+      removeInputLine();
+
+      const password = input;
+      const sudoCommand = terminalState.sudo.command || '';
+
+      terminalState.input = '';
+      terminalState.cursor = 0;
+
+      if (WebLinuxAuth.verifyPassword(password)) {
+        terminalState.sudo.cacheUntil = Date.now() + 60000;
+        finishSudoPrompt();
+
+        const commandToRun = sudoCommand.replace(/^sudo\s+/, '');
+        if (!commandToRun) {
+          writeLine('sudo: a command is required');
+        } else {
+          const commandResult = executeCommand(commandToRun, { isRoot: true });
+          if (commandResult === '\x1b[CLEAR]') terminalElement.innerHTML = '';
+          else if (commandResult) writeOutput(commandResult);
+        }
+
+        renderInput();
+        scrollToBottom();
+        return;
+      }
+
+      terminalState.sudo.attempts += 1;
+      if (terminalState.sudo.attempts >= 3) {
+        finishSudoPrompt();
+        writeLine('sudo: 3 incorrect password attempts');
+      } else {
+        writeLine('Sorry, try again.');
+        terminalState.input = '';
+        terminalState.cursor = 0;
+        renderInput();
+        scrollToBottom();
+        return;
+      }
+
+      renderInput();
+      scrollToBottom();
+      return;
+    }
+
     removeInputLine();
     writeLine(buildPromptHtml() + escapeHtml(input));
 
@@ -592,9 +1022,34 @@ function initFS(){
 
     const trimmedInput = input.trim();
     if (trimmedInput) {
+      if (/^sudo(?:\s|$)/.test(trimmedInput)) {
+        const sudoTarget = trimmedInput.replace(/^sudo\s+/, '');
+        terminalState.history.push(trimmedInput);
+        terminalState.historyIdx = terminalState.history.length;
+
+        if (!sudoTarget) {
+          writeLine('sudo: a command is required');
+          renderInput();
+          scrollToBottom();
+          return;
+        }
+
+        if (terminalState.sudo.cacheUntil > Date.now()) {
+          const commandResult = executeCommand(sudoTarget, { isRoot: true });
+          if (commandResult === '\x1b[CLEAR]') terminalElement.innerHTML = '';
+          else if (commandResult) writeOutput(commandResult);
+          renderInput();
+          scrollToBottom();
+          return;
+        }
+
+        startSudoPrompt(trimmedInput);
+        return;
+      }
+
       terminalState.history.push(trimmedInput);
       terminalState.historyIdx = terminalState.history.length;
-      const commandResult = Pipe.execute(trimmedInput, terminalState);
+      const commandResult = executeCommand(trimmedInput);
       if (commandResult === '\x1b[CLEAR]') terminalElement.innerHTML = '';
       else if (commandResult) writeOutput(commandResult);
     }
@@ -620,35 +1075,6 @@ function initFS(){
     renderInput();
     scrollToBottom();
   }
-
-  /* Boot sequence - typewriter style */
-  const bootLines = [
-    '\x1b[1;32m  ██╗    ██╗███████╗██████╗ ██╗     ██╗███╗   ██╗██╗   ██╗██╗  ██╗\x1b[0m',
-    '\x1b[1;32m  ██║    ██║██╔════╝██╔══██╗██║     ██║████╗  ██║██║   ██║╚██╗██╔╝\x1b[0m',
-    '\x1b[1;32m  ██║ █╗ ██║█████╗  ██████╔╝██║     ██║██╔██╗ ██║██║   ██║ ╚███╔╝\x1b[0m',
-    '\x1b[1;32m  ██║███╗██║██╔══╝  ██╔══██╗██║     ██║██║╚██╗██║██║   ██║ ██╔██╗\x1b[0m',
-    '\x1b[1;32m  ╚███╔███╔╝███████╗██████╔╝███████╗██║██║ ╚████║╚██████╔╝██╔╝ ██╗\x1b[0m',
-    '\x1b[1;32m   ╚══╝╚══╝ ╚══════╝╚═════╝ ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝\x1b[0m',
-    '',
-    '\x1b[37m  WebLinux Terminal v1.1\x1b[0m  \x1b[90m·\x1b[0m  \x1b[33mKernel\x1b[0m 6.5.0-generic  \x1b[90m·\x1b[0m  \x1b[33mShell\x1b[0m bash 5.2',
-    '\x1b[90m  Type "help" for available commands · "man <cmd>" for details\x1b[0m',
-    ''
-  ];
-
-  let bootIdx = 0;
-  function bootStep() {
-    if (bootIdx < bootLines.length) {
-      writeOutput(bootLines[bootIdx]);
-      bootIdx++;
-      const delay = 15;
-      setTimeout(bootStep, delay);
-    } else {
-      renderInput();
-      scrollToBottom();
-      if (inputManager) inputManager.focus();
-    }
-  }
-  bootStep();
 
   /* Tab */
   function handleTab() {
@@ -701,6 +1127,33 @@ function initFS(){
   }
 
   function handleKey(key, metadata = {}) {
+    if (!window.__weblinuxLoginComplete) {
+      return true;
+    }
+
+    if (terminalState.sudo.active) {
+      const isCtrlPressed = !!metadata.ctrlKey;
+
+      if (isCtrlPressed && key === 'c') {
+        removeInputLine();
+        writeLine('^C');
+        cancelSudoPrompt();
+        return true;
+      }
+
+      if (key === 'Enter') {
+        submitInput();
+        return true;
+      }
+
+      if (key === 'Backspace') {
+        backspaceOnce();
+        return true;
+      }
+
+      return true;
+    }
+
     if (terminalMode !== 'normal') {
       return window.NanoEditor && typeof window.NanoEditor.isActive === 'function' ? window.NanoEditor.isActive() : true;
     }
@@ -851,6 +1304,13 @@ function initFS(){
       onKey: handleKey,
       onPaste: (text) => insertChars(text)
     });
+
+    window.__weblinuxInputManager = inputManager;
+    window.__weblinuxTerminalState = terminalState;
+
+    if (!window.__weblinuxLoginComplete) {
+      inputManager.setEnabled(false);
+    }
   }
 
   if (window.NanoEditor && typeof window.NanoEditor.init === 'function') {
@@ -862,6 +1322,11 @@ function initFS(){
       setTerminalMode,
       focusTerminal: () => { if (inputManager) inputManager.focus(); }
     });
+  }
+
+  if (window.__weblinuxLoginComplete) {
+    renderInput();
+    scrollToBottom();
   }
 
   window.handleKey = handleKey;

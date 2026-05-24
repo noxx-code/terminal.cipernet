@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebLinux Terminal</title>
+    <title>WEBLINUX v1.3</title>
     <link rel="stylesheet" href="assets/styles/styles.css">
     <script src="utils/jsonLoader.js" defer></script>
     <script src="managers/runtimeGenerators.js" defer></script>
@@ -16,7 +16,49 @@
     <script src="core/script.js" defer></script>
     <link rel="icon" type="image/png" href="assets/images/favicon.png">
   </head>
-  <body>
+  <body class="login-booting">
+    <div id="login-screen" class="login-screen" aria-label="WEBLINUX login screen">
+      <canvas id="login-matrix" class="login-matrix" aria-hidden="true"></canvas>
+      <div class="login-vignette" aria-hidden="true"></div>
+      <div class="login-scanlines" aria-hidden="true"></div>
+      <div class="login-shell">
+        <header class="login-brand">
+          <div class="login-brand-main">WEBLINUX</div>
+          <div class="login-brand-version">v1.3</div>
+        </header>
+
+        <div id="login-boot" class="login-boot" aria-live="polite"></div>
+
+        <section class="login-panel" aria-label="Login form">
+          <div class="login-panel-header">WEBLINUX v1.3 tty1</div>
+          <form id="login-form" class="login-form" autocomplete="off" novalidate>
+            <label class="login-row" for="login-username">
+              <span>login:</span>
+              <input id="login-username" class="login-input" type="text" name="username" autocomplete="username" spellcheck="false" autocapitalize="off" autocorrect="off" autofocus>
+            </label>
+            <label class="login-row" for="login-password">
+              <span>password:</span>
+              <input id="login-password" class="login-input" type="password" name="password" autocomplete="current-password" spellcheck="false" autocapitalize="off" autocorrect="off">
+            </label>
+            <div id="login-status" class="login-status" aria-live="polite">Booting secure browser sandbox...</div>
+            <button type="submit" class="login-submit" tabindex="-1" hidden>Login</button>
+          </form>
+        </section>
+
+        <footer class="login-footer">
+          <div>Fast. Lightweight. Secure.</div>
+          <div>Learn Linux by Using It</div>
+          <pre class="login-penguin" aria-hidden="true">  .--.
+ |o_o |
+ |:_/ |
+//   \\ \\
+(|     | )
+'/\\_   _/`\\
+\\___)=(___/</pre>
+        </footer>
+      </div>
+    </div>
+
     <div class="page-layout">
       <!-- Terminal panel -->
       <div class="terminal-wrapper">
