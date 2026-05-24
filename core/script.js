@@ -690,7 +690,7 @@ function fmtL(e){const pm=e.permissions||(e.type==='directory'?'drwxr-xr-x':'-rw
 
 C.pwd=(a,s)=>s.cwd;
 C.ls=(args,s)=>{let sa=false,lo=false;const paths=[];for(const a of args){if(a.startsWith('-')){if(a.includes('a'))sa=true;if(a.includes('l'))lo=true}else paths.push(a)}if(!paths.length)paths.push('.');const res=[];for(const p of paths){const nd=VFS.getN(p,s.cwd);if(!nd)return`ls: cannot access '${p}': No such file or directory`;if(nd.type==='file'){res.push(lo?fmtL(nd):nd.name);continue}let ent=Object.values(nd.children);if(sa)ent=[{name:'.',type:'directory',permissions:nd.permissions,owner:nd.owner,group:nd.group,size:4096,modifiedAt:nd.modifiedAt},{name:'..',type:'directory',permissions:'drwxr-xr-x',owner:'root',group:'root',size:4096,modifiedAt:nd.modifiedAt},...ent];else ent=ent.filter(e=>!e.name.startsWith('.'));if(paths.length>1)res.push(p+':');if(lo){res.push('total '+ent.length*4);for(const e of ent)res.push(fmtL(e))}else res.push(ent.map(e=>e.type==='directory'?`\x1b[1;34m${e.name}\x1b[0m`:e.name).join('  '))}return res.join('\n')};
-C.cd=(args,s)=>{const t=args[0]||'~';const abs=VFS.absStr(t,s.cwd);const nd=VFS.getN(t,s.cwd);if(!nd)return`bash: cd: ${t}: No such file or directory`;if(nd.type!=='directory')return`bash: cd: ${t}: Not a directory`;s.cwd=abs||'/';updateStatusCwd(s.cwd);return''};
+C.cd=(args,s)=>{const t=args[0]||'~';const abs=VFS.absStr(t,s.cwd);const nd=VFS.getN(t,s.cwd);if(!nd)return{stdout:'',stderr:`bash: cd: ${t}: No such file or directory\n`,exitCode:1};if(nd.type!=='directory')return{stdout:'',stderr:`bash: cd: ${t}: Not a directory\n`,exitCode:1};s.cwd=abs||'/';return{stdout:'',stderr:'',exitCode:0}};
 C.mkdir=(args,s)=>{if(!args.length)return'mkdir: missing operand';let mp=false;const dirs=[];for(const a of args){if(a==='-p')mp=true;else dirs.push(a)}const r=[];for(const d of dirs){if(mp)VFS._mkdirp(VFS.absStr(d,s.cwd));else{const e=VFS.mkdir(d,s.cwd);if(e)r.push(e)}}return r.join('\n')};
 C.rmdir=(args,s)=>{if(!args.length)return'rmdir: missing operand';const r=[];for(const a of args){const n=VFS.getN(a,s.cwd);if(!n){r.push(`rmdir: '${a}': No such file or directory`);continue}if(n.type!=='directory'){r.push(`rmdir: '${a}': Not a directory`);continue}if(Object.keys(n.children).length>0){r.push(`rmdir: '${a}': Directory not empty`);continue}VFS.rm(a,s.cwd)}return r.join('\n')};
 C.rm=(args,s)=>{let rec=false,force=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r')||a.includes('R'))rec=true;if(a.includes('f'))force=true}else files.push(a)}if(!files.length)return force?'':'rm: missing operand';const r=[];for(const f of files){const e=VFS.rm(f,s.cwd,rec);if(e&&!force)r.push(e)}return r.join('\n')};
@@ -702,7 +702,7 @@ C.head=(args,s,stdin)=>{let n=10;const files=[];for(let i=0;i<args.length;i++){i
 C.tail=(args,s,stdin)=>{let n=10,fol=false;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(args[i]==='-f')fol=true;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null){const l=stdin.split('\n');return l.slice(Math.max(0,l.length-n)).join('\n')}if(!files.length)return'tail: missing operand';const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`tail: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);const l=c.split('\n');r.push(l.slice(Math.max(0,l.length-n)).join('\n'))}if(fol)r.push('\x1b[33m[tail -f simulated]\x1b[0m');return r.join('\n')};
 C.less=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'less: missing operand';const f=args.find(a=>!a.startsWith('-'));const c=VFS.read(f,s.cwd);if(c===null)return`${f}: No such file or directory`;return c+'\n\x1b[7m(END)\x1b[0m'};
 C.nano=(args,s)=>{const target=args.find(a=>!a.startsWith('-'));if(!target)return'nano: missing file operand';if(!window.NanoEditor||typeof window.NanoEditor.open!=='function')return'nano: editor is not available';const result=window.NanoEditor.open(target,s.cwd);return result&&result.success?'':(result&&result.message?result.message:'nano: editor is not available')};
-C.grep=(args,s,stdin)=>{let ic=false,ln=false,rec=false,inv=false,cnt=false;const pos=[];for(const a of args){if(a.startsWith('-')&&!a.startsWith('--')){if(a.includes('i'))ic=true;if(a.includes('n'))ln=true;if(a.includes('r'))rec=true;if(a.includes('v'))inv=true;if(a.includes('c'))cnt=true}else pos.push(a)}if(!pos.length)return'grep: missing pattern';const pat=pos[0];const files=pos.slice(1);let re;try{re=new RegExp(pat,ic?'i':'')}catch(e){return`grep: Invalid regex: '${pat}'`}function gC(ct,fn,mf){const ls=ct.split('\n');const r=[];let count=0;for(let i=0;i<ls.length;i++){const m=re.test(ls[i]);if(m!==inv){count++;if(!cnt){let l=ls[i],px='';if(mf&&fn)px+=`\x1b[35m${fn}\x1b[0m:`;if(ln)px+=`\x1b[32m${i+1}\x1b[0m:`;if(!inv)l=l.replace(re,m=>`\x1b[1;31m${m}\x1b[0m`);r.push(px+l)}}}if(cnt)r.push((mf&&fn?fn+':':'')+count);return r}if(!files.length){if(stdin==null)return'grep: no input';return gC(stdin,null,false).join('\n')}if(rec){const r=[];for(const f of files){const found=VFS.findN(f,s.cwd,n=>n.type==='file');for(const path of found){const c=VFS.read(path,s.cwd);if(c!==null)r.push(...gC(c,path,true))}}return r.join('\n')}const r=[];const mf=files.length>1;for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`grep: ${f}: No such file or directory`);continue}r.push(...gC(c,f,mf))}return r.join('\n')};
+C.grep=(args,s,stdin)=>{let ic=false,ln=false,rec=false,inv=false,cnt=false;const pos=[];for(const a of args){if(a.startsWith('-')&&!a.startsWith('--')){if(a.includes('i'))ic=true;if(a.includes('n'))ln=true;if(a.includes('r'))rec=true;if(a.includes('v'))inv=true;if(a.includes('c'))cnt=true}else pos.push(a)}if(!pos.length)return{stdout:'',stderr:'grep: missing pattern\n',exitCode:2};const pat=pos[0];const files=pos.slice(1);let re;try{re=new RegExp(pat,ic?'i':'')}catch(e){return{stdout:'',stderr:`grep: Invalid regex: '${pat}'\n`,exitCode:2}}function gC(ct,fn,mf){const ls=String(ct).split('\n');const r=[];let count=0;for(let i=0;i<ls.length;i++){const rawLine=ls[i];const m=re.test(rawLine);if(m!==inv){count++;if(!cnt){let l=rawLine,px='';if(mf&&fn)px+=`\x1b[35m${fn}\x1b[0m:`;if(ln)px+=`\x1b[32m${i+1}\x1b[0m:`;if(!inv)l=l.replace(re,mv=>`\x1b[1;31m${mv}\x1b[0m`);r.push(px+l)}}}if(cnt)r.push((mf&&fn?fn+':':'')+count);return{lines:r,count}}if(!files.length){if(stdin==null)return{stdout:'',stderr:'grep: no input\n',exitCode:2};const hit=gC(stdin,null,false);return{stdout:hit.lines.length?`${hit.lines.join('\n')}\n`:'',stderr:'',exitCode:hit.count>0?0:1}}if(rec){const r=[];let total=0;for(const f of files){const found=VFS.findN(f,s.cwd,n=>n.type==='file');for(const path of found){const c=VFS.read(path,s.cwd);if(c!==null){const hit=gC(c,path,true);r.push(...hit.lines);total+=hit.count}}}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:'',exitCode:total>0?0:1}}const r=[];const errs=[];let total=0;const mf=files.length>1;for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){errs.push(`grep: ${f}: No such file or directory`);continue}const hit=gC(c,f,mf);r.push(...hit.lines);total+=hit.count}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:errs.length?`${errs.join('\n')}\n`:'',exitCode:errs.length?2:(total>0?0:1)}};
 C.find=(args,s)=>{let sp='.',np=null,tf=null;for(let i=0;i<args.length;i++){if(args[i]==='-name'&&args[i+1])np=args[++i];else if(args[i]==='-type'&&args[i+1])tf=args[++i];else if(!args[i].startsWith('-'))sp=args[i]}return VFS.findN(sp,s.cwd,(n)=>{if(np){const re=new RegExp('^'+np.replace(/\*/g,'.*').replace(/\?/g,'.')+'$');if(!re.test(n.name))return false}if(tf){if(tf==='f'&&n.type!=='file')return false;if(tf==='d'&&n.type!=='directory')return false}return true}).join('\n')};
 C.locate=(args,s)=>{if(!args.length)return'locate: no pattern';const re=new RegExp(args[0],'i');const r=VFS.findN('/',s.cwd,n=>re.test(n.name));return r.length?r.join('\n'):`locate: no results for '${args[0]}'`};
 C.which=(args)=>{if(!args.length)return'which: missing argument';return args.map(cmd=>C[cmd]?`/usr/bin/${cmd}`:`${cmd} not found`).join('\n')};
@@ -743,7 +743,10 @@ C.history=(a,s)=>s.history.map((h,i)=>`  ${String(i+1).padStart(4)}  ${h}`).join
 C.clear=()=>'\x1b[CLEAR]';
 C.date=()=>new Date().toString();
 C.cal=()=>{const now=new Date(),y=now.getFullYear(),m=now.getMonth();const mo=['January','February','March','April','May','June','July','August','September','October','November','December'];let cal=`    ${mo[m]} ${y}\nSu Mo Tu We Th Fr Sa\n`;const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();let line='   '.repeat(fd);for(let d=1;d<=dim;d++){const ds=d===now.getDate()?`\x1b[7m${String(d).padStart(2)}\x1b[0m`:String(d).padStart(2);line+=ds;if((fd+d)%7===0){cal+=line+'\n';line=''}else line+=' '}if(line.trim())cal+=line;return cal};
-C.echo=(args,s)=>{let start=0;if(args[0]==='-n')start=1;const currentUser=s&&s.isRoot?'root':US.cur();const currentHome=s&&s.isRoot?'/root':'/home/user';let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,currentHome).replace(/\$USER/g,currentUser).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');text=text.replace(/^"(.*)"$/s,'$1').replace(/^'(.*)'$/s,'$1');return text};
+C.echo=(args,s)=>{let start=0;let addNewline=true;if(args[0]==='-n'){start=1;addNewline=false}const currentUser=s&&s.isRoot?'root':US.cur();const currentHome=s&&s.isRoot?'/root':'/home/user';let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,currentHome).replace(/\$USER/g,currentUser).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');return addNewline?`${text}\n`:text};
+// Debug helpers for tokenizer/parser behavior inspection.
+C['debug-tokens']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-tokens: missing input\n',exitCode:2};try{return{stdout:`${JSON.stringify(window.ShellTokenizer.tokenize(source),null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'tokenizer error'}\n`,exitCode:2}}};
+C['debug-ast']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-ast: missing input\n',exitCode:2};try{const tokens=window.ShellTokenizer.tokenize(source);const chunks=window.ShellParser.splitBySemicolon(tokens).filter(chunk=>chunk.length);const ast=chunks.length===1?window.ShellParser.parse(chunks[0]):chunks.map(chunk=>window.ShellParser.parse(chunk));return{stdout:`${JSON.stringify(ast,null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'parser error'}\n`,exitCode:2}}};
 C.man=(args)=>{
   if(!args.length)return"What manual page do you want?\nTry 'man man'.";
   if(args[0]==='-f'||args[0]==='--whatis')return args[1]?manWhatis(args[1])||`No manual entry for ${args[1]}`:'whatis: what manual page do you want?';
@@ -766,29 +769,89 @@ C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
 C.sudo=(args,s,stdin)=>{if(!args.length)return'usage: sudo command';if(C[args[0]])return C[args[0]](args.slice(1),s,stdin);return`sudo: ${args[0]}: command not found`};
 C.help=()=>{const sec={'FILE SYSTEM':['pwd','ls','cd','mkdir','rmdir','rm','cp','mv','touch'],'FILE VIEWING':['cat','head','tail','less'],'SEARCH':['grep','find','locate','which'],'TEXT':['sort','uniq','wc','cut','awk','sed'],'EDITORS':['nano'],'PERMISSIONS':['chmod','chown','chgrp'],'PROCESS':['ps','top','kill'],'COMPRESSION':['tar','zip','gzip','gunzip'],'NETWORK':['ping','ifconfig','netstat','ssh','scp'],'PACKAGES':['apt'],'SYSTEM':['df','du','free','uname','whoami','who','hostname','id'],'USER MGMT':['useradd','userdel','passwd'],'MISC':['echo','date','cal','history','clear','man','env','help']};let o='\x1b[1;37mAvailable Commands\x1b[0m\n';for(const[s,cmds]of Object.entries(sec))o+=`\n\x1b[1;33m${s}\x1b[0m\n  \x1b[36m${cmds.join('\x1b[0m, \x1b[36m')}\x1b[0m\n`;o+='\n\x1b[90mSupports: pipes (|), redirects (> >> <), Tab completion, history\x1b[0m';return o};
 
-/* ====== PIPE ENGINE ====== */
-const Pipe=(()=>{
-  function tokenize(input){const tk=[];let cur='',inS=false,inD=false,esc=false;for(let i=0;i<input.length;i++){const c=input[i];if(esc){cur+=c;esc=false;continue}if(c==='\\'&&!inS){esc=true;continue}if(c==="'"&&!inD){inS=!inS;continue}if(c==='"'&&!inS){inD=!inD;continue}if(!inS&&!inD){if(c==='|'||c==='>'||c==='<'){if(cur){tk.push(cur);cur=''}if(c==='>'&&input[i+1]==='>'){tk.push('>>');i++}else tk.push(c);continue}if(c===' '||c==='\t'){if(cur){tk.push(cur);cur=''}continue}}cur+=c}if(cur)tk.push(cur);return tk}
-  function splitP(tk){const sg=[];let cur=[];for(const t of tk){if(t==='|'){if(cur.length)sg.push(cur);cur=[]}else cur.push(t)}if(cur.length)sg.push(cur);return sg}
-  function exRedir(tk){const args=[];const rd={out:null,oApp:null,in:null};for(let i=0;i<tk.length;i++){if(tk[i]==='>'&&tk[i+1])rd.out=tk[++i];else if(tk[i]==='>>'&&tk[i+1])rd.oApp=tk[++i];else if(tk[i]==='<'&&tk[i+1])rd.in=tk[++i];else args.push(tk[i])}return{args,rd}}
-  function execute(raw,state){
-    const tr=raw.trim();if(!tr)return'';
-    if(tr.includes('&&')){const parts=tr.split(/\s*&&\s*/);const r=[];for(const p of parts){const res=execute(p.trim(),state);if(res)r.push(res)}return r.join('\n')}
-    if(tr.includes(';')){const parts=tr.split(/\s*;\s*/);const r=[];for(const p of parts){if(p.trim()){const res=execute(p.trim(),state);if(res)r.push(res)}}return r.join('\n')}
-    const tk=tokenize(tr);const segs=splitP(tk);
-    let pIn=null,lastO='';
-    for(let i=0;i<segs.length;i++){
-      const{args,rd}=exRedir(segs[i]);if(!args.length)continue;
-      const cn=args[0];const ca=args.slice(1);
-      let stdin=pIn;if(rd.in){const c=VFS.read(rd.in,state.cwd);if(c===null)return`bash: ${rd.in}: No such file or directory`;stdin=c}
-      let out='';if(C[cn])out=C[cn](ca,state,stdin)||'';else out=`bash: ${cn}: command not found`;
-      if(rd.out){VFS.write(rd.out,state.cwd,out);out=''}else if(rd.oApp){VFS.append(rd.oApp,state.cwd,out);out=''}
-      pIn=out;lastO=out;
-    }
-    return lastO;
+/* ====== SHELL COMMAND RUNTIME ====== */
+function normalizeCommandResult(rawResult) {
+  if (rawResult && typeof rawResult === 'object' && ('stdout' in rawResult || 'stderr' in rawResult || 'exitCode' in rawResult)) {
+    return {
+      stdout: typeof rawResult.stdout === 'string' ? rawResult.stdout : '',
+      stderr: typeof rawResult.stderr === 'string' ? rawResult.stderr : '',
+      exitCode: Number.isInteger(rawResult.exitCode) ? rawResult.exitCode : 0,
+      control: typeof rawResult.control === 'string' ? rawResult.control : '',
+    };
   }
-  return{execute};
-})();
+
+  if (rawResult === '\x1b[CLEAR]') {
+    return {
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      control: 'CLEAR',
+    };
+  }
+
+  if (rawResult === undefined || rawResult === null) {
+    return {
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+      control: '',
+    };
+  }
+
+  const text = String(rawResult);
+  const isErrorLike = /^(bash:|[a-z][a-z0-9_-]*:)/i.test(text) && !/^usage:/i.test(text);
+  return {
+    stdout: isErrorLike ? '' : text,
+    stderr: isErrorLike ? (text.endsWith('\n') ? text : `${text}\n`) : '',
+    exitCode: isErrorLike ? 1 : 0,
+    control: '',
+  };
+}
+
+function createCommandRuntime(commands) {
+  const registry = {};
+
+  for (const [name, handler] of Object.entries(commands || {})) {
+    registry[name] = {
+      name,
+      async execute(args, context) {
+        try {
+          const runtimeState = context.terminalState;
+          const stdin = context.stdin != null ? String(context.stdin) : '';
+          const raw = handler(args || [], runtimeState, stdin);
+          return normalizeCommandResult(raw);
+        } catch (error) {
+          return {
+            stdout: '',
+            stderr: `shell: ${name}: ${error && error.message ? error.message : 'execution failed'}`,
+            exitCode: 1,
+            control: '',
+          };
+        }
+      },
+    };
+  }
+
+  return {
+    listCommandNames() {
+      return Object.keys(registry);
+    },
+
+    async execute(name, args, context) {
+      const command = registry[name];
+      if (!command) {
+        return {
+          stdout: '',
+          stderr: `bash: ${name}: command not found`,
+          exitCode: 127,
+          control: '',
+        };
+      }
+
+      return command.execute(args, context);
+    },
+  };
+}
 
 /* ====== INIT FS ====== */
 function initFS(){
@@ -825,6 +888,8 @@ function initFS(){
       cacheUntil: 0,
     },
   };
+  const commandRuntime = createCommandRuntime(C);
+  const shellRuntime = new window.ShellRuntime({ commandRuntime });
   const scheduleTerminalFit = () => TerminalFit.schedule(terminalElement);
 
   if (document.fonts && document.fonts.ready) {
@@ -842,16 +907,80 @@ function initFS(){
     document.body.classList.toggle('nano-active', terminalMode === 'nano');
   }
 
-  function executeCommand(command, options = {}) {
+  async function executeCommand(command, options = {}) {
     const previousRootState = terminalState.isRoot;
     if (typeof options.isRoot === 'boolean') {
       terminalState.isRoot = options.isRoot;
     }
 
     try {
-      return Pipe.execute(command, terminalState);
+      const runtimeContext = {
+        cwd: terminalState.cwd,
+        env: {
+          HOME: terminalState.isRoot ? '/root' : '/home/user',
+          USER: terminalState.isRoot ? 'root' : (terminalState.user || 'user'),
+          PWD: terminalState.cwd,
+          SHELL: '/bin/bash',
+        },
+        vfs: VFS,
+        shell: shellRuntime,
+        stdin: '',
+        terminalState,
+      };
+
+      const result = await shellRuntime.run(command, runtimeContext);
+      updateStatusCwd(terminalState.cwd);
+      return result;
     } finally {
       terminalState.isRoot = previousRootState;
+    }
+  }
+
+  function executeDebugUtility(rawInput) {
+    const text = String(rawInput || '').trim();
+    const match = text.match(/^(debug-(?:tokens|ast))\s+([\s\S]+)$/);
+    if (!match) return null;
+
+    const [, commandName, payload] = match;
+    if (!payload || !payload.trim()) {
+      return {
+        stdout: '',
+        stderr: `${commandName}: missing input\n`,
+        exitCode: 2,
+        control: '',
+      };
+    }
+
+    try {
+      if (commandName === 'debug-tokens') {
+        const tokens = window.ShellTokenizer.tokenize(payload);
+        return {
+          stdout: `${JSON.stringify(tokens, null, 2)}\n`,
+          stderr: '',
+          exitCode: 0,
+          control: '',
+        };
+      }
+
+      const tokens = window.ShellTokenizer.tokenize(payload);
+      const chunks = window.ShellParser.splitBySemicolon(tokens).filter(chunk => chunk.length);
+      const ast = chunks.length === 1
+        ? window.ShellParser.parse(chunks[0])
+        : chunks.map(chunk => window.ShellParser.parse(chunk));
+
+      return {
+        stdout: `${JSON.stringify(ast, null, 2)}\n`,
+        stderr: '',
+        exitCode: 0,
+        control: '',
+      };
+    } catch (error) {
+      return {
+        stdout: '',
+        stderr: `${error && error.message ? error.message : 'debug parser error'}\n`,
+        exitCode: 2,
+        control: '',
+      };
     }
   }
 
@@ -949,9 +1078,10 @@ function initFS(){
     scheduleTerminalFit();
   }
 
-  function writeOutput(text) {
+  function writeOutput(text, stream = 'stdout') {
     if (!text) return;
-    const html = Ansi.toHtml(text);
+    const renderedText = stream === 'stderr' ? `\x1b[31m${text}\x1b[0m` : text;
+    const html = Ansi.toHtml(renderedText);
     html.split('\n').forEach((line) => writeLine(line || ' '));
   }
 
@@ -964,7 +1094,7 @@ function initFS(){
     terminalElement.scrollTop = terminalElement.scrollHeight;
   }
 
-  function submitInput() {
+  async function submitInput() {
     const input = terminalState.input;
 
     if (terminalState.sudo.active) {
@@ -984,9 +1114,10 @@ function initFS(){
         if (!commandToRun) {
           writeLine('sudo: a command is required');
         } else {
-          const commandResult = executeCommand(commandToRun, { isRoot: true });
-          if (commandResult === '\x1b[CLEAR]') terminalElement.innerHTML = '';
-          else if (commandResult) writeOutput(commandResult);
+          const commandResult = await executeCommand(commandToRun, { isRoot: true });
+          if (commandResult.control === 'CLEAR') terminalElement.innerHTML = '';
+          if (commandResult.stdout) writeOutput(commandResult.stdout, 'stdout');
+          if (commandResult.stderr) writeOutput(commandResult.stderr, 'stderr');
         }
 
         renderInput();
@@ -1033,9 +1164,10 @@ function initFS(){
         }
 
         if (terminalState.sudo.cacheUntil > Date.now()) {
-          const commandResult = executeCommand(sudoTarget, { isRoot: true });
-          if (commandResult === '\x1b[CLEAR]') terminalElement.innerHTML = '';
-          else if (commandResult) writeOutput(commandResult);
+          const commandResult = await executeCommand(sudoTarget, { isRoot: true });
+          if (commandResult.control === 'CLEAR') terminalElement.innerHTML = '';
+          if (commandResult.stdout) writeOutput(commandResult.stdout, 'stdout');
+          if (commandResult.stderr) writeOutput(commandResult.stderr, 'stderr');
           renderInput();
           scrollToBottom();
           return;
@@ -1047,9 +1179,11 @@ function initFS(){
 
       terminalState.history.push(trimmedInput);
       terminalState.historyIdx = terminalState.history.length;
-      const commandResult = executeCommand(trimmedInput);
-      if (commandResult === '\x1b[CLEAR]') terminalElement.innerHTML = '';
-      else if (commandResult) writeOutput(commandResult);
+      const debugResult = executeDebugUtility(trimmedInput);
+      const commandResult = debugResult || await executeCommand(trimmedInput);
+      if (commandResult.control === 'CLEAR') terminalElement.innerHTML = '';
+      if (commandResult.stdout) writeOutput(commandResult.stdout, 'stdout');
+      if (commandResult.stderr) writeOutput(commandResult.stderr, 'stderr');
     }
 
     renderInput();
@@ -1080,7 +1214,7 @@ function initFS(){
 
     if (inputParts.length <= 1) {
       const commandPartial = inputParts[0] || '';
-      const matchingCommands = Object.keys(C).filter((commandName) => commandName.startsWith(commandPartial));
+      const matchingCommands = commandRuntime.listCommandNames().filter((commandName) => commandName.startsWith(commandPartial));
 
       if (matchingCommands.length === 1) {
         terminalState.input = `${matchingCommands[0]} `;
@@ -1140,7 +1274,7 @@ function initFS(){
       }
 
       if (key === 'Enter') {
-        submitInput();
+        void submitInput();
         return true;
       }
 
@@ -1221,7 +1355,7 @@ function initFS(){
     }
 
     if (key === 'Enter') {
-      submitInput();
+      void submitInput();
       return true;
     }
 
