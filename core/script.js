@@ -18,10 +18,10 @@
 function updateStatusCwd(cwd) {
   const cwdElement = document.getElementById('status-cwd');
   const titleBarElement = document.querySelector('.title-bar-title');
-  const sessionUser = window.weblinuxSessionUser || 'user';
+  const sessionUser = window.weblinuxSessionUser || 'pass';
 
   let displayPath = cwd;
-  if (displayPath.startsWith('/home/user')) displayPath = `~${displayPath.slice(10)}`;
+  if (displayPath.startsWith('/home/pass')) displayPath = `~${displayPath.slice(10)}`;
   if (!displayPath) displayPath = '~';
 
   if (cwdElement) cwdElement.textContent = displayPath;
@@ -31,7 +31,7 @@ function updateStatusCwd(cwd) {
 }
 
 window.__weblinuxLoginComplete = false;
-window.weblinuxSessionUser = window.weblinuxSessionUser || 'user';
+window.weblinuxSessionUser = window.weblinuxSessionUser || 'pass';
 window.__weblinuxInputManager = null;
 window.__weblinuxTerminalState = null;
 
@@ -45,7 +45,7 @@ const WebLinuxAuth = (() => {
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== 'object') return null;
       return {
-        username: typeof parsed.username === 'string' ? parsed.username : 'user',
+        username: typeof parsed.username === 'string' ? parsed.username : 'pass',
         password: typeof parsed.password === 'string' ? parsed.password : '',
       };
     } catch (error) {
@@ -56,7 +56,7 @@ const WebLinuxAuth = (() => {
   function writeRecord(username, password) {
     try {
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        username: username || 'user',
+        username: username || 'pass',
         password: password || '',
       }));
     } catch (error) {
@@ -73,7 +73,7 @@ const WebLinuxAuth = (() => {
 
   function getUsername() {
     const record = readRecord();
-    return record ? record.username : (window.weblinuxSessionUser || 'user');
+    return record ? record.username : (window.weblinuxSessionUser || 'pass');
   }
 
   function verifyPassword(candidate) {
@@ -188,7 +188,7 @@ const LoginScreen = (() => {
     const inputManager = window.__weblinuxInputManager;
     const terminalState = window.__weblinuxTerminalState;
 
-    window.weblinuxSessionUser = username || 'user';
+    window.weblinuxSessionUser = username || 'pass';
 
     if (terminalElement) terminalElement.innerHTML = '';
 
@@ -302,7 +302,7 @@ const LoginScreen = (() => {
     loginForm.addEventListener('submit', (event) => {
       event.preventDefault();
 
-      const username = usernameInput.value.trim() || 'user';
+      const username = usernameInput.value.trim() || 'pass';
       const password = passwordInput.value;
 
       if (!password) {
@@ -515,12 +515,12 @@ const PM=(()=>{let np=1;const P=[];
 })();
 
 /* ====== USER SYSTEM ====== */
-const US=(()=>{const db={root:{uid:0,gid:0,home:'/root',shell:'/bin/bash'},user:{uid:1000,gid:1000,home:'/home/user',shell:'/bin/bash'},daemon:{uid:1,gid:1,home:'/usr/sbin',shell:'/usr/sbin/nologin'},nobody:{uid:65534,gid:65534,home:'/nonexistent',shell:'/usr/sbin/nologin'}};
+const US=(()=>{const db={root:{uid:0,gid:0,home:'/root',shell:'/bin/bash'},pass:{uid:1000,gid:1000,home:'/home/pass',shell:'/bin/bash'},daemon:{uid:1,gid:1,home:'/usr/sbin',shell:'/usr/sbin/nologin'},nobody:{uid:65534,gid:65534,home:'/nonexistent',shell:'/usr/sbin/nologin'}};
   function addU(n){if(db[n])return`useradd: user '${n}' already exists`;db[n]={uid:1000+Object.keys(db).length,gid:1000+Object.keys(db).length,home:'/home/'+n,shell:'/bin/bash'};VFS._mkdirp('/home/'+n);return null}
-  function delU(n){if(!db[n])return`userdel: user '${n}' does not exist`;if(n==='root'||n==='user')return`userdel: cannot remove essential user`;delete db[n];return null}
+  function delU(n){if(!db[n])return`userdel: user '${n}' does not exist`;if(n==='root'||n==='pass')return`userdel: cannot remove essential user`;delete db[n];return null}
   function passwd(n){if(!db[n])return`passwd: user '${n}' does not exist`;return`passwd: password updated successfully for ${n}`}
   function getPF(){return Object.entries(db).map(([n,u])=>`${n}:x:${u.uid}:${u.gid}:${n}:${u.home}:${u.shell}`).join('\n')}
-  function cur(){return'user'}function exists(n){return!!db[n]}
+  function cur(){return'pass'}function exists(n){return!!db[n]}
   return{addU,delU,passwd,getPF,cur,exists};
 })();
 
@@ -687,20 +687,23 @@ function manApropos(term){
 /* ====== COMMANDS ====== */
 const C={};
 function fmtL(e){const pm=e.permissions||(e.type==='directory'?'drwxr-xr-x':'-rw-r--r--');const lk=e.type==='directory'?'2':'1';const ow=(e.owner||'user').padEnd(6);const gr=(e.group||'user').padEnd(6);const sz=String(e.size||0).padStart(6);const d=new Date(e.modifiedAt||Date.now());const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];const ds=`${mo[d.getMonth()]} ${String(d.getDate()).padStart(2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;const cl=e.type==='directory'?'\x1b[1;34m':'';const rs=e.type==='directory'?'\x1b[0m':'';return`${pm} ${lk} ${ow} ${gr} ${sz} ${ds} ${cl}${e.name}${rs}`}
+function resolveFsPath(pathValue, cwd){return VFS.resolvePath(pathValue, cwd);}
+function resolveFsNode(pathValue, cwd){return VFS.getN(resolveFsPath(pathValue, cwd), '/');}
+function resolveFsParent(pathValue, cwd){const absolutePath=resolveFsPath(pathValue, cwd);return{path:absolutePath,parentPath:VFS.dirname(absolutePath,'/'),node:resolveFsNode(absolutePath,'/'),parentNode:resolveFsNode(VFS.dirname(absolutePath,'/'),'/')};}
 
-C.pwd=(a,s)=>s.cwd;
-C.ls=(args,s)=>{let sa=false,lo=false;const paths=[];for(const a of args){if(a.startsWith('-')){if(a.includes('a'))sa=true;if(a.includes('l'))lo=true}else paths.push(a)}if(!paths.length)paths.push('.');const res=[];for(const p of paths){const nd=VFS.getN(p,s.cwd);if(!nd)return`ls: cannot access '${p}': No such file or directory`;if(nd.type==='file'){res.push(lo?fmtL(nd):nd.name);continue}let ent=Object.values(nd.children);if(sa)ent=[{name:'.',type:'directory',permissions:nd.permissions,owner:nd.owner,group:nd.group,size:4096,modifiedAt:nd.modifiedAt},{name:'..',type:'directory',permissions:'drwxr-xr-x',owner:'root',group:'root',size:4096,modifiedAt:nd.modifiedAt},...ent];else ent=ent.filter(e=>!e.name.startsWith('.'));if(paths.length>1)res.push(p+':');if(lo){res.push('total '+ent.length*4);for(const e of ent)res.push(fmtL(e))}else res.push(ent.map(e=>e.type==='directory'?`\x1b[1;34m${e.name}\x1b[0m`:e.name).join('  '))}return res.join('\n')};
-C.cd=(args,s)=>{const t=args[0]||'~';const abs=VFS.absStr(t,s.cwd);const nd=VFS.getN(t,s.cwd);if(!nd)return{stdout:'',stderr:`bash: cd: ${t}: No such file or directory\n`,exitCode:1};if(nd.type!=='directory')return{stdout:'',stderr:`bash: cd: ${t}: Not a directory\n`,exitCode:1};s.cwd=abs||'/';return{stdout:'',stderr:'',exitCode:0}};
-C.mkdir=(args,s)=>{if(!args.length)return'mkdir: missing operand';let mp=false;const dirs=[];for(const a of args){if(a==='-p')mp=true;else dirs.push(a)}const r=[];for(const d of dirs){if(mp)VFS._mkdirp(VFS.absStr(d,s.cwd));else{const e=VFS.mkdir(d,s.cwd);if(e)r.push(e)}}return r.join('\n')};
-C.rmdir=(args,s)=>{if(!args.length)return'rmdir: missing operand';const r=[];for(const a of args){const n=VFS.getN(a,s.cwd);if(!n){r.push(`rmdir: '${a}': No such file or directory`);continue}if(n.type!=='directory'){r.push(`rmdir: '${a}': Not a directory`);continue}if(Object.keys(n.children).length>0){r.push(`rmdir: '${a}': Directory not empty`);continue}VFS.rm(a,s.cwd)}return r.join('\n')};
-C.rm=(args,s)=>{let rec=false,force=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r')||a.includes('R'))rec=true;if(a.includes('f'))force=true}else files.push(a)}if(!files.length)return force?'':'rm: missing operand';const r=[];for(const f of files){const e=VFS.rm(f,s.cwd,rec);if(e&&!force)r.push(e)}return r.join('\n')};
-C.cp=(args,s)=>{const nf=args.filter(a=>!a.startsWith('-'));if(nf.length<2)return'cp: missing operand';const dst=nf.pop();const r=[];for(const src of nf){const e=VFS.cp(src,dst,s.cwd);if(e)r.push(e)}return r.join('\n')};
-C.mv=(args,s)=>{const nf=args.filter(a=>!a.startsWith('-'));if(nf.length<2)return'mv: missing operand';const dst=nf.pop();const r=[];for(const src of nf){const e=VFS.mv(src,dst,s.cwd);if(e)r.push(e)}return r.join('\n')};
-C.touch=(args,s)=>{if(!args.length)return'touch: missing operand';for(const a of args){if(a.startsWith('-'))continue;const ex=VFS.getN(a,s.cwd);if(ex)ex.modifiedAt=VFS.now();else VFS.write(a,s.cwd,'')}return''};
-C.cat=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'cat: missing file operand';const r=[];for(const a of args){if(a.startsWith('-'))continue;const c=VFS.read(a,s.cwd);if(c===null){const n=VFS.getN(a,s.cwd);r.push(n&&n.type==='directory'?`cat: ${a}: Is a directory`:`cat: ${a}: No such file or directory`)}else r.push(c)}return r.join('\n')};
-C.head=(args,s,stdin)=>{let n=10;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null)return stdin.split('\n').slice(0,n).join('\n');if(!files.length)return'head: missing operand';const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`head: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);r.push(c.split('\n').slice(0,n).join('\n'))}return r.join('\n')};
-C.tail=(args,s,stdin)=>{let n=10,fol=false;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(args[i]==='-f')fol=true;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null){const l=stdin.split('\n');return l.slice(Math.max(0,l.length-n)).join('\n')}if(!files.length)return'tail: missing operand';const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`tail: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);const l=c.split('\n');r.push(l.slice(Math.max(0,l.length-n)).join('\n'))}if(fol)r.push('\x1b[33m[tail -f simulated]\x1b[0m');return r.join('\n')};
-C.less=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'less: missing operand';const f=args.find(a=>!a.startsWith('-'));const c=VFS.read(f,s.cwd);if(c===null)return`${f}: No such file or directory`;return c+'\n\x1b[7m(END)\x1b[0m'};
+C.pwd=(a,s)=>resolveFsPath(s.cwd, '/');
+C.ls=(args,s)=>{let sa=false,lo=false;const paths=[];for(const a of args){if(a.startsWith('-')){if(a.includes('a'))sa=true;if(a.includes('l'))lo=true}else paths.push(a)}if(!paths.length)paths.push('.');const res=[];for(const p of paths){const target=resolveFsPath(p,s.cwd);const nd=resolveFsNode(target,'/');if(!nd)return`ls: cannot access '${p}': No such file or directory`;if(nd.type==='file'){res.push(lo?fmtL(nd):nd.name);continue}let ent=Object.values(nd.children);if(sa)ent=[{name:'.',type:'directory',permissions:nd.permissions,owner:nd.owner,group:nd.group,size:4096,modifiedAt:nd.modifiedAt},{name:'..',type:'directory',permissions:'drwxr-xr-x',owner:'root',group:'root',size:4096,modifiedAt:nd.modifiedAt},...ent];else ent=ent.filter(e=>!e.name.startsWith('.'));if(paths.length>1)res.push(p+':');if(lo){res.push('total '+ent.length*4);for(const e of ent)res.push(fmtL(e))}else res.push(ent.map(e=>e.type==='directory'?`\x1b[1;34m${e.name}\x1b[0m`:e.name).join('  '))}return res.join('\n')};
+C.cd=(args,s)=>{const t=args[0]||'~';const abs=resolveFsPath(t,s.cwd);const nd=resolveFsNode(abs,'/');if(!nd)return{stdout:'',stderr:`bash: cd: ${t}: No such file or directory\n`,exitCode:1};if(nd.type!=='directory')return{stdout:'',stderr:`bash: cd: ${t}: Not a directory\n`,exitCode:1};s.cwd=abs||'/';return{stdout:'',stderr:'',exitCode:0}};
+C.mkdir=(args,s)=>{if(!args.length)return'mkdir: missing operand';let mp=false;const dirs=[];for(const a of args){if(a==='-p')mp=true;else dirs.push(a)}const r=[];for(const d of dirs){if(mp){const target=resolveFsPath(d,s.cwd);VFS.ensureDirectoryPath(target,'/')}else{const e=VFS.mkdir(resolveFsPath(d,s.cwd),'/');if(e)r.push(e)}}return r.join('\n')};
+C.rmdir=(args,s)=>{if(!args.length)return'rmdir: missing operand';const r=[];for(const a of args){const target=resolveFsPath(a,s.cwd);const n=resolveFsNode(target,'/');if(!n){r.push(`rmdir: '${a}': No such file or directory`);continue}if(n.type!=='directory'){r.push(`rmdir: '${a}': Not a directory`);continue}if(Object.keys(n.children).length>0){r.push(`rmdir: '${a}': Directory not empty`);continue}VFS.rm(target,'/')}return r.join('\n')};
+C.rm=(args,s)=>{let rec=false,force=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r')||a.includes('R'))rec=true;if(a.includes('f'))force=true}else files.push(a)}if(!files.length)return force?'':'rm: missing operand';const r=[];for(const f of files){const e=VFS.rm(resolveFsPath(f,s.cwd),'/',rec);if(e&&!force)r.push(e)}return r.join('\n')};
+C.cp=(args,s)=>{const nf=args.filter(a=>!a.startsWith('-'));if(nf.length<2)return'cp: missing operand';const dst=resolveFsPath(nf.pop(),s.cwd);const r=[];for(const src of nf){const e=VFS.cp(resolveFsPath(src,s.cwd),dst,'/');if(e)r.push(e)}return r.join('\n')};
+C.mv=(args,s)=>{const nf=args.filter(a=>!a.startsWith('-'));if(nf.length<2)return'mv: missing operand';const dst=resolveFsPath(nf.pop(),s.cwd);const r=[];for(const src of nf){const e=VFS.mv(resolveFsPath(src,s.cwd),dst,'/');if(e)r.push(e)}return r.join('\n')};
+C.touch=(args,s)=>{if(!args.length)return'touch: missing operand';const r=[];for(const a of args){if(a.startsWith('-'))continue;const ok=VFS.touch(resolveFsPath(a,s.cwd),'/');if(!ok)r.push(`touch: cannot touch '${a}': No such file or directory`)}return r.join('\n')};
+C.cat=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'cat: missing file operand';const r=[];for(const a of args){if(a.startsWith('-'))continue;const target=resolveFsPath(a,s.cwd);const c=VFS.read(target,'/');if(c===null){const n=resolveFsNode(target,'/');if(n&&n.type==='directory')r.push(`cat: ${a}: Is a directory`);else if(n&&n.type==='virtual')r.push('cat: invalid virtual node');else r.push(`cat: ${a}: No such file or directory`)}else r.push(c)}return r.join('\n')};
+C.head=(args,s,stdin)=>{let n=10;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null)return stdin.split('\n').slice(0,n).join('\n');if(!files.length)return'head: missing operand';const r=[];for(const f of files){const target=resolveFsPath(f,s.cwd);const c=VFS.read(target,'/');if(c===null){r.push(`head: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);r.push(c.split('\n').slice(0,n).join('\n'))}return r.join('\n')};
+C.tail=(args,s,stdin)=>{let n=10,fol=false;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(args[i]==='-f')fol=true;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null){const l=stdin.split('\n');return l.slice(Math.max(0,l.length-n)).join('\n')}if(!files.length)return'tail: missing operand';const r=[];for(const f of files){const target=resolveFsPath(f,s.cwd);const c=VFS.read(target,'/');if(c===null){r.push(`tail: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);const l=c.split('\n');r.push(l.slice(Math.max(0,l.length-n)).join('\n'))}if(fol)r.push('\x1b[33m[tail -f simulated]\x1b[0m');return r.join('\n')};
+C.less=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'less: missing operand';const f=args.find(a=>!a.startsWith('-'));const target=resolveFsPath(f,s.cwd);const c=VFS.read(target,'/');if(c===null)return`${f}: No such file or directory`;return c+'\n\x1b[7m(END)\x1b[0m'};
 C.nano=(args,s)=>{const target=args.find(a=>!a.startsWith('-'));if(!target)return'nano: missing file operand';if(!window.NanoEditor||typeof window.NanoEditor.open!=='function')return'nano: editor is not available';const result=window.NanoEditor.open(target,s.cwd);return result&&result.success?'':(result&&result.message?result.message:'nano: editor is not available')};
 C.grep=(args,s,stdin)=>{let ic=false,ln=false,rec=false,inv=false,cnt=false;const pos=[];for(const a of args){if(a.startsWith('-')&&!a.startsWith('--')){if(a.includes('i'))ic=true;if(a.includes('n'))ln=true;if(a.includes('r'))rec=true;if(a.includes('v'))inv=true;if(a.includes('c'))cnt=true}else pos.push(a)}if(!pos.length)return{stdout:'',stderr:'grep: missing pattern\n',exitCode:2};const pat=pos[0];const files=pos.slice(1);let re;try{re=new RegExp(pat,ic?'i':'')}catch(e){return{stdout:'',stderr:`grep: Invalid regex: '${pat}'\n`,exitCode:2}}function gC(ct,fn,mf){const ls=String(ct).split('\n');const r=[];let count=0;for(let i=0;i<ls.length;i++){const rawLine=ls[i];const m=re.test(rawLine);if(m!==inv){count++;if(!cnt){let l=rawLine,px='';if(mf&&fn)px+=`\x1b[35m${fn}\x1b[0m:`;if(ln)px+=`\x1b[32m${i+1}\x1b[0m:`;if(!inv)l=l.replace(re,mv=>`\x1b[1;31m${mv}\x1b[0m`);r.push(px+l)}}}if(cnt)r.push((mf&&fn?fn+':':'')+count);return{lines:r,count}}if(!files.length){if(stdin==null)return{stdout:'',stderr:'grep: no input\n',exitCode:2};const hit=gC(stdin,null,false);return{stdout:hit.lines.length?`${hit.lines.join('\n')}\n`:'',stderr:'',exitCode:hit.count>0?0:1}}if(rec){const r=[];let total=0;for(const f of files){const found=VFS.findN(f,s.cwd,n=>n.type==='file');for(const path of found){const c=VFS.read(path,s.cwd);if(c!==null){const hit=gC(c,path,true);r.push(...hit.lines);total+=hit.count}}}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:'',exitCode:total>0?0:1}}const r=[];const errs=[];let total=0;const mf=files.length>1;for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){errs.push(`grep: ${f}: No such file or directory`);continue}const hit=gC(c,f,mf);r.push(...hit.lines);total+=hit.count}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:errs.length?`${errs.join('\n')}\n`:'',exitCode:errs.length?2:(total>0?0:1)}};
 C.find=(args,s)=>{let sp='.',np=null,tf=null;for(let i=0;i<args.length;i++){if(args[i]==='-name'&&args[i+1])np=args[++i];else if(args[i]==='-type'&&args[i+1])tf=args[++i];else if(!args[i].startsWith('-'))sp=args[i]}return VFS.findN(sp,s.cwd,(n)=>{if(np){const re=new RegExp('^'+np.replace(/\*/g,'.*').replace(/\?/g,'.')+'$');if(!re.test(n.name))return false}if(tf){if(tf==='f'&&n.type!=='file')return false;if(tf==='d'&&n.type!=='directory')return false}return true}).join('\n')};
@@ -727,9 +730,9 @@ C.du=(args,s)=>{const h=args.includes('-h'),sm=args.includes('-s'),t=args.find(a
 C.free=(args)=>args.includes('-h')?'              total        used        free      shared  buff/cache   available\nMem:          7.7Gi       2.1Gi       3.8Gi       256Mi       1.8Gi       5.1Gi\nSwap:         2.0Gi          0B       2.0Gi':'              total        used        free      shared  buff/cache   available\nMem:        8052736     2202624     3985408      262144     1864704     5373952\nSwap:       2097152           0     2097152';
 C.uname=(args)=>{if(args.includes('-a'))return'Linux weblinux 6.5.0-generic #1 SMP x86_64 GNU/Linux';if(args.includes('-r'))return'6.5.0-generic';return'Linux'};
 C.whoami=(args,s)=>s&&s.isRoot?'root':US.cur();
-C.who=(args,s)=>{const d=new Date();const user=s&&s.isRoot?'root':'user';return`${user}     pts/0        ${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} (web-terminal)`};
+C.who=(args,s)=>{const d=new Date();const user=s&&s.isRoot?'root':'pass';return`${user}     pts/0        ${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} (web-terminal)`};
 C.hostname=()=>'weblinux';
-C.id=(args,s)=>s&&s.isRoot?'uid=0(root) gid=0(root) groups=0(root),27(sudo)':'uid=1000(user) gid=1000(user) groups=1000(user),27(sudo)';
+C.id=(args,s)=>s&&s.isRoot?'uid=0(root) gid=0(root) groups=0(root),27(sudo)':'uid=1000(pass) gid=1000(pass) groups=1000(pass),27(sudo)';
 C.sort=(args,s,stdin)=>{let rev=false,num=false,uniq=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r'))rev=true;if(a.includes('n'))num=true;if(a.includes('u'))uniq=true}else files.push(a)}let text='';if(files.length){for(const f of files){const c=VFS.read(f,s.cwd);if(c===null)return`sort: ${f}: No such file`;text+=(text?'\n':'')+c}}else if(stdin!=null)text=stdin;else return'';let l=text.split('\n');if(num)l.sort((a,b)=>parseFloat(a)-parseFloat(b));else l.sort();if(rev)l.reverse();if(uniq)l=[...new Set(l)];return l.join('\n')};
 C.uniq=(args,s,stdin)=>{let cm=false,dm=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('c'))cm=true;if(a.includes('d'))dm=true}else files.push(a)}let text='';if(files.length){const c=VFS.read(files[0],s.cwd);if(c===null)return`uniq: ${files[0]}: No such file`;text=c}else if(stdin!=null)text=stdin;else return'';const lines=text.split('\n');const r=[];let prev=null,count=0;for(const line of lines){if(line===prev)count++;else{if(prev!==null&&(!dm||count>1))r.push(cm?`${String(count).padStart(7)} ${prev}`:prev);prev=line;count=1}}if(prev!==null&&(!dm||count>1))r.push(cm?`${String(count).padStart(7)} ${prev}`:prev);return r.join('\n')};
 C.wc=(args,s,stdin)=>{let lf=false,wf=false,cf=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('l'))lf=true;if(a.includes('w'))wf=true;if(a.includes('c'))cf=true}else files.push(a)}const all=!lf&&!wf&&!cf;function cnt(t,nm){const l=t.split('\n').length;const w=t.split(/\s+/).filter(Boolean).length;const ch=t.length;const p=[];if(all||lf)p.push(String(l).padStart(6));if(all||wf)p.push(String(w).padStart(6));if(all||cf)p.push(String(ch).padStart(6));if(nm)p.push(' '+nm);return p.join('')}if(!files.length){if(stdin==null)return'wc: missing operand';return cnt(stdin,'')}const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`wc: ${f}: No such file`);continue}r.push(cnt(c,f))}return r.join('\n')};
@@ -743,7 +746,7 @@ C.history=(a,s)=>s.history.map((h,i)=>`  ${String(i+1).padStart(4)}  ${h}`).join
 C.clear=()=>'\x1b[CLEAR]';
 C.date=()=>new Date().toString();
 C.cal=()=>{const now=new Date(),y=now.getFullYear(),m=now.getMonth();const mo=['January','February','March','April','May','June','July','August','September','October','November','December'];let cal=`    ${mo[m]} ${y}\nSu Mo Tu We Th Fr Sa\n`;const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();let line='   '.repeat(fd);for(let d=1;d<=dim;d++){const ds=d===now.getDate()?`\x1b[7m${String(d).padStart(2)}\x1b[0m`:String(d).padStart(2);line+=ds;if((fd+d)%7===0){cal+=line+'\n';line=''}else line+=' '}if(line.trim())cal+=line;return cal};
-C.echo=(args,s)=>{let start=0;let addNewline=true;if(args[0]==='-n'){start=1;addNewline=false}const currentUser=s&&s.isRoot?'root':US.cur();const currentHome=s&&s.isRoot?'/root':'/home/user';let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,currentHome).replace(/\$USER/g,currentUser).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');return addNewline?`${text}\n`:text};
+C.echo=(args,s)=>{let start=0;let addNewline=true;if(args[0]==='-n'){start=1;addNewline=false}const currentUser=s&&s.isRoot?'root':US.cur();const currentHome=s&&s.isRoot?'/root':'/home/pass';let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,currentHome).replace(/\$USER/g,currentUser).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');return addNewline?`${text}\n`:text};
 // Debug helpers for tokenizer/parser behavior inspection.
 C['debug-tokens']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-tokens: missing input\n',exitCode:2};try{return{stdout:`${JSON.stringify(window.ShellTokenizer.tokenize(source),null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'tokenizer error'}\n`,exitCode:2}}};
 C['debug-ast']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-ast: missing input\n',exitCode:2};try{const tokens=window.ShellTokenizer.tokenize(source);const chunks=window.ShellParser.splitBySemicolon(tokens).filter(chunk=>chunk.length);const ast=chunks.length===1?window.ShellParser.parse(chunks[0]):chunks.map(chunk=>window.ShellParser.parse(chunk));return{stdout:`${JSON.stringify(ast,null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'parser error'}\n`,exitCode:2}}};
@@ -763,7 +766,7 @@ C.man=(args)=>{
   const page=manPage(target,section);
   return page||`No manual entry for ${target}${section?` in section ${section}`:''}`;
 };
-C.env=(a,s)=>`HOME=${s&&s.isRoot?'/root':'/home/user'}\nUSER=${s&&s.isRoot?'root':US.cur()}\nSHELL=/bin/bash\nPWD=${s.cwd}\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nHOSTNAME=weblinux\nTERM=xterm-256color\nLANG=en_US.UTF-8`;
+C.env=(a,s)=>`HOME=${s&&s.isRoot?'/root':'/home/pass'}\nUSER=${s&&s.isRoot?'root':US.cur()}\nSHELL=/bin/bash\nPWD=${s.cwd}\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nHOSTNAME=weblinux\nTERM=xterm-256color\nLANG=en_US.UTF-8`;
 C.export=()=>'';C.alias=()=>'';
 C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
 C.sudo=(args,s,stdin)=>{if(!args.length)return'usage: sudo command';if(C[args[0]])return C[args[0]](args.slice(1),s,stdin);return`sudo: ${args[0]}: command not found`};
@@ -873,13 +876,13 @@ function initFS(){
   let inputManager = null;
   let terminalMode = 'normal';
   const terminalState = {
-    cwd: '/home/user',
+    cwd: '/home/pass',
     history: [],
     historyIdx: -1,
     input: '',
     cursor: 0,
     saved: '',
-    user: window.weblinuxSessionUser || 'user',
+    user: window.weblinuxSessionUser || 'pass',
     isRoot: false,
     sudo: {
       active: false,
@@ -917,8 +920,8 @@ function initFS(){
       const runtimeContext = {
         cwd: terminalState.cwd,
         env: {
-          HOME: terminalState.isRoot ? '/root' : '/home/user',
-          USER: terminalState.isRoot ? 'root' : (terminalState.user || 'user'),
+          HOME: terminalState.isRoot ? '/root' : '/home/pass',
+          USER: terminalState.isRoot ? 'root' : (terminalState.user || 'pass'),
           PWD: terminalState.cwd,
           SHELL: '/bin/bash',
         },
@@ -1025,14 +1028,14 @@ function initFS(){
   window.addEventListener('orientationchange', scheduleTerminalFit, { passive: true });
 
   function buildPromptHtml() {
-    const sessionUser = terminalState.user || window.weblinuxSessionUser || 'user';
+    const sessionUser = terminalState.user || window.weblinuxSessionUser || 'pass';
 
     if (terminalState.sudo.active) {
       return `<span class="prompt-user">[sudo]</span><span class="prompt-host"> password for ${escapeHtml(sessionUser)}</span><span class="prompt-sym">:</span><span class="prompt-dollar"> </span>`;
     }
 
     let displayPath = terminalState.cwd;
-    if (displayPath.startsWith('/home/user')) displayPath = `~${displayPath.slice(10)}`;
+    if (displayPath.startsWith('/home/pass')) displayPath = `~${displayPath.slice(10)}`;
     if (!displayPath) displayPath = '~';
     const promptSymbol = terminalState.isRoot ? '#' : '$';
 

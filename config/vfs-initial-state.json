@@ -9,181 +9,35 @@
     { "path": "/etc", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/home", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/lib", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/media", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/mnt", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/opt", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/proc", "owner": "root", "group": "root", "permissions": "dr-xr-xr-x" },
-    { "path": "/root", "owner": "root", "group": "root", "permissions": "drwx------" },
-    { "path": "/run", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/sbin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/srv", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/sys", "owner": "root", "group": "root", "permissions": "dr-xr-xr-x" },
     { "path": "/tmp", "owner": "root", "group": "root", "permissions": "drwxrwxrwt" },
     { "path": "/usr", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/usr/bin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/usr/lib", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/usr/sbin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/usr/share", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/usr/local", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
+    { "path": "/usr/local/bin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/var", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/var/log", "owner": "root", "group": "adm", "permissions": "drwxr-xr-x" },
-    { "path": "/var/tmp", "owner": "root", "group": "root", "permissions": "drwxrwxrwt" },
-    { "path": "/home/user", "owner": "user", "group": "user", "permissions": "drwxr-xr-x" },
-    { "path": "/home/user/projects", "owner": "user", "group": "user", "permissions": "drwxr-xr-x" },
-    { "path": "/home/user/.config", "owner": "user", "group": "user", "permissions": "drwx------" },
-    { "path": "/home/user/.ssh", "owner": "user", "group": "user", "permissions": "drwx------" }
+    { "path": "/home/pass", "owner": "pass", "group": "pass", "permissions": "drwxr-xr-x" }
   ],
   "files": [
-    {
-      "path": "/etc/passwd",
-      "owner": "root",
-      "group": "root",
-      "permissions": "-rw-r--r--",
-      "content": "root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:User:/home/user:/bin/bash\n"
-    },
-    {
-      "path": "/etc/hostname",
-      "owner": "root",
-      "group": "root",
-      "permissions": "-rw-r--r--",
-      "content": "weblinux"
-    },
-    {
-      "path": "/etc/hosts",
-      "owner": "root",
-      "group": "root",
-      "permissions": "-rw-r--r--",
-      "content": "127.0.0.1 localhost\n127.0.1.1 weblinux\n::1 localhost ip6-localhost ip6-loopback\n"
-    },
-    {
-      "path": "/etc/bashrc",
-      "owner": "root",
-      "group": "root",
-      "permissions": "-rw-r--r--",
-      "content": "# /etc/bashrc\nexport PS1=\"\\u@\\h:\\w$ \"\n"
-    },
-    {
-      "path": "/home/user/.bashrc",
-      "owner": "user",
-      "group": "user",
-      "permissions": "-rw-r--r--",
-      "content": "# ~/.bashrc\nexport PATH=\"/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\nalias ll=\"ls -la\"\nalias la=\"ls -a\"\n"
-    },
-    {
-      "path": "/home/user/.profile",
-      "owner": "user",
-      "group": "user",
-      "permissions": "-rw-r--r--",
-      "content": "# ~/.profile\n[ -f ~/.bashrc ] && . ~/.bashrc\n"
-    },
-    {
-      "path": "/home/user/notes.txt",
-      "owner": "user",
-      "group": "user",
-      "permissions": "-rw-r--r--",
-      "content": "Learning sandbox notes.\nUse pwd, ls, cd, cat, touch, mkdir, and rm to explore.\n"
-    },
-    {
-      "path": "/home/user/todo.txt",
-      "owner": "user",
-      "group": "user",
-      "permissions": "-rw-r--r--",
-      "content": "TODO\n- Learn path resolution\n- Practice directory traversal\n- Inspect /proc runtime files\n"
-    },
-    {
-      "path": "/home/user/projects/README.md",
-      "owner": "user",
-      "group": "user",
-      "permissions": "-rw-r--r--",
-      "content": "# Browser Linux Sandbox\nThis directory is for practice projects inside the virtual filesystem.\n"
-    },
-    {
-      "path": "/home/user/projects/app.js",
-      "owner": "user",
-      "group": "user",
-      "permissions": "-rwxr-xr-x",
-      "content": "console.log('Hello from the virtual filesystem');\n"
-    },
-    {
-      "path": "/home/user/projects/data.json",
-      "owner": "user",
-      "group": "user",
-      "permissions": "-rw-r--r--",
-      "content": "{\n  \"app\": \"virtual-sandbox\",\n  \"version\": \"1.0.0\"\n}\n"
-    },
-    {
-      "path": "/var/log/syslog",
-      "owner": "root",
-      "group": "adm",
-      "permissions": "-rw-r-----",
-      "content": "Jan 01 00:00:01 weblinux kernel: Virtual kernel booted successfully\nJan 01 00:00:02 weblinux systemd[1]: Started browser runtime services\n"
-    },
-    {
-      "path": "/var/log/auth.log",
-      "owner": "root",
-      "group": "adm",
-      "permissions": "-rw-r-----",
-      "content": "Jan 01 00:00:03 weblinux sshd[100]: Accepted key for user from 127.0.0.1\n"
-    }
+    { "path": "/etc/passwd", "owner": "root", "group": "root", "permissions": "-rw-r--r--", "content": "root:x:0:0:root:/root:/bin/bash\npass:x:1000:1000:Pass:/home/pass:/bin/bash\n" },
+    { "path": "/etc/hostname", "owner": "root", "group": "root", "permissions": "-rw-r--r--", "content": "weblinux" },
+    { "path": "/etc/hosts", "owner": "root", "group": "root", "permissions": "-rw-r--r--", "content": "127.0.0.1 localhost\n127.0.1.1 weblinux\n::1 localhost ip6-localhost ip6-loopback\n" },
+    { "path": "/etc/bashrc", "owner": "root", "group": "root", "permissions": "-rw-r--r--", "content": "# /etc/bashrc\nexport PS1=\"\\u@\\h:\\w$ \"\n" },
+    { "path": "/var/log/syslog", "owner": "root", "group": "adm", "permissions": "-rw-r-----", "content": "Jan 01 00:00:01 weblinux kernel: Virtual kernel booted successfully\nJan 01 00:00:02 weblinux systemd[1]: Started browser runtime services\n" },
+    { "path": "/var/log/auth.log", "owner": "root", "group": "adm", "permissions": "-rw-r-----", "content": "Jan 01 00:00:03 weblinux sshd[100]: Accepted key for pass from 127.0.0.1\n" }
   ],
   "virtualFiles": [
-    {
-      "path": "/proc/version",
-      "owner": "root",
-      "group": "root",
-      "permissions": "-r--r--r--",
-      "generator": "proc.version",
-      "kind": "runtime",
-      "readOnly": true
-    },
-    {
-      "path": "/proc/meminfo",
-      "owner": "root",
-      "group": "root",
-      "permissions": "-r--r--r--",
-      "generator": "proc.meminfo",
-      "kind": "runtime",
-      "readOnly": true
-    },
-    {
-      "path": "/proc/cpuinfo",
-      "owner": "root",
-      "group": "root",
-      "permissions": "-r--r--r--",
-      "generator": "proc.cpuinfo",
-      "kind": "runtime",
-      "readOnly": true
-    }
+    { "path": "/proc/version", "owner": "root", "group": "root", "permissions": "-r--r--r--", "generator": "proc.version", "kind": "runtime", "readOnly": true },
+    { "path": "/proc/meminfo", "owner": "root", "group": "root", "permissions": "-r--r--r--", "generator": "proc.meminfo", "kind": "runtime", "readOnly": true },
+    { "path": "/proc/cpuinfo", "owner": "root", "group": "root", "permissions": "-r--r--r--", "generator": "proc.cpuinfo", "kind": "runtime", "readOnly": true },
+    { "path": "/proc/uptime", "owner": "root", "group": "root", "permissions": "-r--r--r--", "generator": "proc.uptime", "kind": "runtime", "readOnly": true }
   ],
   "devices": [
-    {
-      "path": "/dev/null",
-      "owner": "root",
-      "group": "root",
-      "permissions": "crw-rw-rw-",
-      "generator": "device.null",
-      "device": "null",
-      "kind": "device",
-      "readOnly": false
-    },
-    {
-      "path": "/dev/random",
-      "owner": "root",
-      "group": "root",
-      "permissions": "crw-rw-rw-",
-      "generator": "device.random",
-      "device": "random",
-      "kind": "device",
-      "readOnly": false
-    },
-    {
-      "path": "/dev/tty",
-      "owner": "user",
-      "group": "tty",
-      "permissions": "crw-rw-rw-",
-      "generator": "device.tty",
-      "device": "tty",
-      "kind": "device",
-      "readOnly": false
-    }
+    { "path": "/dev/null", "owner": "root", "group": "root", "permissions": "crw-rw-rw-", "generator": "device.null", "device": "null", "kind": "device", "readOnly": false },
+    { "path": "/dev/random", "owner": "root", "group": "root", "permissions": "crw-rw-rw-", "generator": "device.random", "device": "random", "kind": "device", "readOnly": false },
+    { "path": "/dev/tty", "owner": "pass", "group": "tty", "permissions": "crw-rw-rw-", "generator": "device.tty", "device": "tty", "kind": "device", "readOnly": false }
   ]
 }

@@ -1,9 +1,11 @@
 (function registerBrowserLinuxVFS(globalScope) {
   const runtimeGenerators = globalScope.RuntimeGenerators || null;
+  const DEFAULT_HOME = '/home/pass';
 
   const state = {
     root: null,
     bootstrapped: false,
+    runtimeStartedAt: Date.now(),
     deviceBuffers: {
       tty: '',
     },
@@ -25,8 +27,8 @@
     const node = {
       name,
       path: options.path || '',
+      parent: options.parent || null,
       type,
-      content: options.content !== undefined && options.content !== null ? String(options.content) : '',
       permissions: normalizePermissions(type, options.permissions),
       owner: options.owner || (type === 'directory' ? 'root' : 'user'),
       group: options.group || (type === 'directory' ? 'root' : 'user'),
@@ -35,14 +37,34 @@
       modifiedAt: options.modifiedAt || createdAt,
       size: typeof options.size === 'number'
         ? options.size
-        : (type === 'directory' ? 4096 : String(options.content || '').length),
+        : (type === 'directory' ? 4096 : 0),
     };
 
+    if (type === 'file') {
+      node.content = options.content !== undefined && options.content !== null ? String(options.content) : '';
+      node.size = typeof options.size === 'number' ? options.size : node.content.length;
+      node.read = () => node.content;
+      node.write = (content) => {
+        node.content = String(content);
+        node.size = node.content.length;
+        node.modifiedAt = now();
+        return true;
+      };
+    } else if (type === 'directory') {
+      node.read = () => null;
+      node.write = () => false;
+    }
+
     if (type === 'virtual') {
+      // Virtual nodes are behavior-backed: their content is generated on read and may ignore writes.
       node.kind = options.kind || 'runtime';
       node.generator = options.generator || null;
       node.device = options.device || null;
       node.readOnly = options.readOnly !== undefined ? options.readOnly : true;
+      node.content = '';
+      node.read = () => readVirtual(node);
+      node.write = (content) => writeVirtual(node, content);
+      node.size = typeof options.size === 'number' ? options.size : 0;
     }
 
     return node;
@@ -59,6 +81,7 @@
       permissions: node.permissions,
       owner: node.owner,
       group: node.group,
+      parent: null,
       createdAt: node.createdAt,
       modifiedAt: node.modifiedAt,
       size: node.size,
@@ -77,12 +100,14 @@
     return copy;
   }
 
-  function assignPaths(node, nodePath) {
+  function assignPaths(node, nodePath, parent = null) {
+    if (!node) return;
+    node.parent = parent;
     node.path = nodePath || '/';
 
     if (node.type === 'directory' && node.children) {
       for (const [childName, childNode] of Object.entries(node.children)) {
-        assignPaths(childNode, createPath(node.path, childName));
+        assignPaths(childNode, createPath(node.path, childName), node);
       }
     }
   }
@@ -90,10 +115,12 @@
   function reset() {
     state.root = createNode('/', 'directory', {
       path: '/',
+      parent: null,
       owner: 'root',
       group: 'root',
       permissions: 'drwxr-xr-x',
     });
+    state.runtimeStartedAt = Date.now();
     state.deviceBuffers.tty = '';
     state.bootstrapped = false;
     return state.root;
@@ -103,11 +130,12 @@
     return String(pathValue || '').split('/').filter(Boolean);
   }
 
-  function resolve(pathValue, cwd = '/home/user') {
-    if (!pathValue) return splitSegments(cwd);
+  function resolveSegments(pathValue, cwd = DEFAULT_HOME) {
+    let input = pathValue;
+    if (input === undefined || input === null || input === '') input = cwd;
 
-    let input = String(pathValue);
-    if (input.startsWith('~')) input = `/home/user${input.slice(1)}`;
+    input = String(input);
+    if (input.startsWith('~')) input = `${DEFAULT_HOME}${input.slice(1)}`;
 
     const baseSegments = input.startsWith('/') ? [] : splitSegments(cwd);
     const parts = splitSegments(input);
@@ -124,14 +152,51 @@
     return baseSegments;
   }
 
-  function absStr(pathValue, cwd = '/home/user') {
-    const resolved = resolve(pathValue, cwd);
+  function normalizePath(pathValue, cwd = DEFAULT_HOME) {
+    const resolved = resolveSegments(pathValue, cwd);
     return resolved.length ? `/${resolved.join('/')}` : '/';
   }
 
-  function getNode(pathValue, cwd = '/home/user') {
+  function resolvePath(pathValue, cwd = DEFAULT_HOME) {
+    return normalizePath(pathValue, cwd);
+  }
+
+  function joinPath(...parts) {
+    const joined = parts
+      .filter((part) => part !== undefined && part !== null && part !== '')
+      .map((part) => String(part))
+      .join('/');
+
+    return normalizePath(joined || '/');
+  }
+
+  function dirname(pathValue, cwd = DEFAULT_HOME) {
+    const normalized = normalizePath(pathValue, cwd);
+    if (normalized === '/') return '/';
+    const index = normalized.lastIndexOf('/');
+    return index <= 0 ? '/' : normalized.slice(0, index);
+  }
+
+  function basename(pathValue, cwd = DEFAULT_HOME) {
+    const normalized = normalizePath(pathValue, cwd);
+    if (normalized === '/') return '/';
+    const index = normalized.lastIndexOf('/');
+    return normalized.slice(index + 1);
+  }
+
+  function resolve(pathValue, cwd = DEFAULT_HOME) {
+    return resolveSegments(pathValue, cwd);
+  }
+
+  function absStr(pathValue, cwd = DEFAULT_HOME) {
+    return normalizePath(pathValue, cwd);
+  }
+
+  function getNode(pathValue, cwd = DEFAULT_HOME) {
     if (!state.root) reset();
-    const segments = resolve(pathValue, cwd);
+    const targetPath = normalizePath(pathValue, cwd);
+    if (targetPath === '/') return state.root;
+    const segments = splitSegments(targetPath);
     let current = state.root;
 
     for (const segment of segments) {
@@ -144,39 +209,33 @@
     return current;
   }
 
-  function getParentRef(pathValue, cwd = '/home/user') {
-    const segments = resolve(pathValue, cwd);
-    if (!segments.length) return { parent: null, name: '/' };
+  function getParentRef(pathValue, cwd = DEFAULT_HOME) {
+    const normalized = normalizePath(pathValue, cwd);
+    if (normalized === '/') return { parent: null, name: '/' };
 
-    const name = segments.pop();
-    let current = state.root || reset();
-
-    for (const segment of segments) {
-      if (!current || current.type !== 'directory' || !current.children || !current.children[segment]) {
-        return { parent: null, name };
-      }
-      current = current.children[segment];
-    }
-
-    return { parent: current, name };
+    const parentPath = dirname(normalized, '/');
+    const name = basename(normalized, '/');
+    const parent = getNode(parentPath, '/');
+    return { parent, name };
   }
 
-  function ensureDirectoryPath(pathValue, cwd = '/home/user', options = {}) {
+  function ensureDirectoryPath(pathValue, cwd = DEFAULT_HOME, options = {}) {
     if (!state.root) reset();
-    const segments = resolve(pathValue, cwd);
+    const targetPath = normalizePath(pathValue, cwd);
+    const segments = splitSegments(targetPath);
     let current = state.root;
-    let currentPath = '';
 
     if (!segments.length) return current;
 
     for (let index = 0; index < segments.length; index++) {
       const segment = segments[index];
-      currentPath = createPath(currentPath || '/', segment);
       let child = current.children[segment];
 
       if (!child) {
+        const currentPath = createPath(current.path || '/', segment);
         child = createNode(segment, 'directory', {
           path: currentPath,
+          parent: current,
           owner: options.owner || current.owner || 'user',
           group: options.group || current.group || 'user',
           permissions: options.permissions || 'drwxr-xr-x',
@@ -189,22 +248,22 @@
       current = child;
     }
 
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return current;
   }
 
-  function ensureFilePath(pathValue, content = '', cwd = '/home/user', options = {}) {
-    const targetPath = absStr(pathValue, cwd);
-    const segments = splitSegments(targetPath);
-    if (!segments.length) return null;
+  function ensureFilePath(pathValue, content = '', cwd = DEFAULT_HOME, options = {}) {
+    const targetPath = normalizePath(pathValue, cwd);
+    if (targetPath === '/') return null;
 
-    const name = segments.pop();
-    const parentPath = segments.length ? `/${segments.join('/')}` : '/';
+    const parentPath = dirname(targetPath, '/');
+    const name = basename(targetPath, '/');
     const parent = ensureDirectoryPath(parentPath, '/', options.parent || {});
     if (!parent) return null;
 
     const node = createNode(name, 'file', {
       path: targetPath,
+      parent,
       content,
       permissions: options.permissions,
       owner: options.owner,
@@ -214,22 +273,22 @@
     });
     node.size = String(content || '').length;
     parent.children[name] = node;
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return node;
   }
 
-  function ensureVirtualPath(pathValue, generatorKey, cwd = '/home/user', options = {}) {
-    const targetPath = absStr(pathValue, cwd);
-    const segments = splitSegments(targetPath);
-    if (!segments.length) return null;
+  function ensureVirtualPath(pathValue, generatorKey, cwd = DEFAULT_HOME, options = {}) {
+    const targetPath = normalizePath(pathValue, cwd);
+    if (targetPath === '/') return null;
 
-    const name = segments.pop();
-    const parentPath = segments.length ? `/${segments.join('/')}` : '/';
+    const parentPath = dirname(targetPath, '/');
+    const name = basename(targetPath, '/');
     const parent = ensureDirectoryPath(parentPath, '/', options.parent || {});
     if (!parent) return null;
 
     const node = createNode(name, 'virtual', {
       path: targetPath,
+      parent,
       permissions: options.permissions,
       owner: options.owner,
       group: options.group,
@@ -241,11 +300,11 @@
       modifiedAt: options.modifiedAt,
     });
     parent.children[name] = node;
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return node;
   }
 
-  function ensureDirectoryValue(pathValue, cwd = '/home/user', options = {}) {
+  function ensureDirectoryValue(pathValue, cwd = DEFAULT_HOME, options = {}) {
     return ensureDirectoryPath(pathValue, cwd, options);
   }
 
@@ -274,7 +333,7 @@
       return state.deviceBuffers.tty;
     }
 
-    return String(node.content || '');
+    return null;
   }
 
   function writeVirtual(node, content) {
@@ -294,15 +353,16 @@
     return false;
   }
 
-  function read(pathValue, cwd = '/home/user') {
+  function read(pathValue, cwd = DEFAULT_HOME) {
     const node = getNode(pathValue, cwd);
     if (!node) return null;
+    if (typeof node.read === 'function') return node.read();
     if (node.type === 'directory') return null;
     if (node.type === 'file') return node.content;
-    return readVirtual(node);
+    return null;
   }
 
-  function write(pathValue, cwd = '/home/user', content = '') {
+  function write(pathValue, cwd = DEFAULT_HOME, content = '') {
     const { parent, name } = getParentRef(pathValue, cwd);
     if (!parent || parent.type !== 'directory') return false;
 
@@ -310,31 +370,29 @@
 
     if (existing && existing.type === 'directory') return false;
     if (existing && existing.type === 'virtual') {
-      const ok = writeVirtual(existing, content);
+      const ok = existing.write(String(content));
       if (ok) existing.modifiedAt = now();
       return ok;
     }
 
     if (existing) {
-      existing.content = String(content);
-      existing.size = existing.content.length;
-      existing.modifiedAt = now();
-      return true;
+      return typeof existing.write === 'function' ? existing.write(content) : false;
     }
 
     const fileNode = createNode(name, 'file', {
       content,
+      parent,
       owner: parent.owner,
       group: parent.group,
       permissions: '-rw-r--r--',
     });
     fileNode.size = String(content || '').length;
     parent.children[name] = fileNode;
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return true;
   }
 
-  function append(pathValue, cwd = '/home/user', content = '') {
+  function append(pathValue, cwd = DEFAULT_HOME, content = '') {
     const { parent, name } = getParentRef(pathValue, cwd);
     if (!parent || parent.type !== 'directory') return false;
 
@@ -342,22 +400,45 @@
     if (existing && existing.type === 'directory') return false;
 
     if (existing && existing.type === 'virtual') {
-      const ok = writeVirtual(existing, content);
+      const ok = existing.write(String(content));
       if (ok) existing.modifiedAt = now();
       return ok;
     }
 
     if (existing) {
-      existing.content = `${existing.content}${String(content)}`;
-      existing.size = existing.content.length;
-      existing.modifiedAt = now();
-      return true;
+      const current = typeof existing.read === 'function' ? existing.read() : existing.content;
+      return typeof existing.write === 'function' ? existing.write(`${String(current || '')}${String(content)}`) : false;
     }
 
     return write(pathValue, cwd, content);
   }
 
-  function mkdir(pathValue, cwd = '/home/user', options = {}) {
+  function touch(pathValue, cwd = DEFAULT_HOME) {
+    const { parent, name } = getParentRef(pathValue, cwd);
+    if (!parent || parent.type !== 'directory') return false;
+
+    const existing = parent.children[name];
+    if (existing && existing.type === 'directory') return false;
+    if (existing && existing.type === 'virtual') return false;
+
+    if (existing) {
+      return typeof existing.write === 'function' ? existing.write(existing.read ? existing.read() : existing.content) : false;
+    }
+
+    const fileNode = createNode(name, 'file', {
+      parent,
+      owner: parent.owner,
+      group: parent.group,
+      permissions: '-rw-r--r--',
+    });
+    fileNode.content = '';
+    fileNode.size = 0;
+    parent.children[name] = fileNode;
+    assignPaths(state.root, '/', null);
+    return true;
+  }
+
+  function mkdir(pathValue, cwd = DEFAULT_HOME, options = {}) {
     const { parent, name } = getParentRef(pathValue, cwd);
     if (!parent || parent.type !== 'directory') {
       return `mkdir: cannot create directory: No such file or directory`;
@@ -370,11 +451,12 @@
     }
 
     parent.children[name] = createNode(name, 'directory', {
+      parent,
       owner: options.owner || parent.owner || 'user',
       group: options.group || parent.group || 'user',
       permissions: options.permissions || 'drwxr-xr-x',
     });
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return null;
   }
 
@@ -384,7 +466,7 @@
     }
   }
 
-  function rm(pathValue, cwd = '/home/user', recursive = false) {
+  function rm(pathValue, cwd = DEFAULT_HOME, recursive = false) {
     const { parent, name } = getParentRef(pathValue, cwd);
     if (!parent || parent.type !== 'directory' || !parent.children[name]) {
       return `rm: cannot remove '${pathValue}': No such file or directory`;
@@ -397,7 +479,7 @@
 
     if (existing.type === 'directory') removeRecursive(existing);
     delete parent.children[name];
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return null;
   }
 
@@ -405,7 +487,7 @@
     return cloneNode(node);
   }
 
-  function mv(src, dst, cwd = '/home/user') {
+  function mv(src, dst, cwd = DEFAULT_HOME) {
     const sourceRef = getParentRef(src, cwd);
     if (!sourceRef.parent || sourceRef.parent.type !== 'directory' || !sourceRef.parent.children[sourceRef.name]) {
       return `mv: cannot stat '${src}': No such file or directory`;
@@ -419,7 +501,7 @@
       if (targetNode.children[sourceNode.name]) delete targetNode.children[sourceNode.name];
       targetNode.children[sourceNode.name] = sourceNode;
       delete sourceRef.parent.children[sourceRef.name];
-      assignPaths(state.root, '/');
+      assignPaths(state.root, '/', null);
       return null;
     }
 
@@ -430,12 +512,13 @@
     if (targetRef.parent.children[targetRef.name]) delete targetRef.parent.children[targetRef.name];
     delete sourceRef.parent.children[sourceRef.name];
     sourceNode.name = targetRef.name;
+    sourceNode.parent = targetRef.parent;
     targetRef.parent.children[targetRef.name] = sourceNode;
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return null;
   }
 
-  function cp(src, dst, cwd = '/home/user') {
+  function cp(src, dst, cwd = DEFAULT_HOME) {
     const source = getNode(src, cwd);
     if (!source) {
       return `cp: cannot stat '${src}': No such file or directory`;
@@ -448,7 +531,7 @@
     if (destinationNode && destinationNode.type === 'directory') {
       if (destinationNode.children[cloned.name]) delete destinationNode.children[cloned.name];
       destinationNode.children[cloned.name] = cloned;
-      assignPaths(state.root, '/');
+      assignPaths(state.root, '/', null);
       return null;
     }
 
@@ -457,12 +540,13 @@
     }
 
     cloned.name = destinationRef.name;
+    cloned.parent = destinationRef.parent;
     destinationRef.parent.children[destinationRef.name] = cloned;
-    assignPaths(state.root, '/');
+    assignPaths(state.root, '/', null);
     return null;
   }
 
-  function findN(startPath, cwd = '/home/user', predicate = () => true) {
+  function findN(startPath, cwd = DEFAULT_HOME, predicate = () => true) {
     const startNode = getNode(startPath, cwd);
     if (!startNode || startNode.type !== 'directory') return [];
 
@@ -479,7 +563,7 @@
     return results;
   }
 
-  function completions(partial, cwd = '/home/user') {
+  function completions(partial, cwd = DEFAULT_HOME) {
     const value = String(partial || '');
     if (!value) {
       const node = getNode('.', cwd);
@@ -505,7 +589,7 @@
     return matches;
   }
 
-  function listDirectory(pathValue = '.', cwd = '/home/user') {
+  function listDirectory(pathValue = '.', cwd = DEFAULT_HOME) {
     const node = getNode(pathValue, cwd);
     if (!node || node.type !== 'directory') return null;
     return Object.values(node.children);
@@ -607,28 +691,17 @@
         { path: '/etc', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/home', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/lib', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/media', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/mnt', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/opt', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/proc', owner: 'root', group: 'root', permissions: 'dr-xr-xr-x' },
-        { path: '/root', owner: 'root', group: 'root', permissions: 'drwx------' },
-        { path: '/run', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/sbin', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/srv', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/sys', owner: 'root', group: 'root', permissions: 'dr-xr-xr-x' },
         { path: '/tmp', owner: 'root', group: 'root', permissions: 'drwxrwxrwt' },
         { path: '/usr', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/usr/bin', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/usr/lib', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/usr/sbin', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/usr/share', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
+        { path: '/usr/local', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
+        { path: '/usr/local/bin', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/var', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/var/log', owner: 'root', group: 'adm', permissions: 'drwxr-xr-x' },
-        { path: '/var/tmp', owner: 'root', group: 'root', permissions: 'drwxrwxrwt' },
-        { path: '/home/user', owner: 'user', group: 'user', permissions: 'drwxr-xr-x' },
-        { path: '/home/user/projects', owner: 'user', group: 'user', permissions: 'drwxr-xr-x' },
-        { path: '/home/user/.config', owner: 'user', group: 'user', permissions: 'drwx------' },
-        { path: '/home/user/.ssh', owner: 'user', group: 'user', permissions: 'drwx------' },
+        { path: '/home/pass', owner: 'pass', group: 'pass', permissions: 'drwxr-xr-x' },
       ],
       files: [
         {
@@ -636,7 +709,7 @@
           owner: 'root',
           group: 'root',
           permissions: '-rw-r--r--',
-          content: 'root:x:0:0:root:/root:/bin/bash\nuser:x:1000:1000:User:/home/user:/bin/bash\n',
+          content: 'root:x:0:0:root:/root:/bin/bash\npass:x:1000:1000:Pass:/home/pass:/bin/bash\n',
         },
         {
           path: '/etc/hostname',
@@ -660,55 +733,6 @@
           content: '# /etc/bashrc\nexport PS1="\\u@\\h:\\w$ "\n',
         },
         {
-          path: '/home/user/.bashrc',
-          owner: 'user',
-          group: 'user',
-          permissions: '-rw-r--r--',
-          content: '# ~/.bashrc\nexport PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"\nalias ll="ls -la"\nalias la="ls -a"\n',
-        },
-        {
-          path: '/home/user/.profile',
-          owner: 'user',
-          group: 'user',
-          permissions: '-rw-r--r--',
-          content: '# ~/.profile\n[ -f ~/.bashrc ] && . ~/.bashrc\n',
-        },
-        {
-          path: '/home/user/notes.txt',
-          owner: 'user',
-          group: 'user',
-          permissions: '-rw-r--r--',
-          content: 'Learning sandbox notes.\nUse pwd, ls, cd, cat, touch, mkdir, and rm to explore.\n',
-        },
-        {
-          path: '/home/user/todo.txt',
-          owner: 'user',
-          group: 'user',
-          permissions: '-rw-r--r--',
-          content: 'TODO\n- Learn path resolution\n- Practice directory traversal\n- Inspect /proc runtime files\n',
-        },
-        {
-          path: '/home/user/projects/README.md',
-          owner: 'user',
-          group: 'user',
-          permissions: '-rw-r--r--',
-          content: '# Browser Linux Sandbox\nThis directory is for practice projects inside the virtual filesystem.\n',
-        },
-        {
-          path: '/home/user/projects/app.js',
-          owner: 'user',
-          group: 'user',
-          permissions: '-rwxr-xr-x',
-          content: 'console.log(\'Hello from the virtual filesystem\');\n',
-        },
-        {
-          path: '/home/user/projects/data.json',
-          owner: 'user',
-          group: 'user',
-          permissions: '-rw-r--r--',
-          content: '{\n  "app": "virtual-sandbox",\n  "version": "1.0.0"\n}\n',
-        },
-        {
           path: '/var/log/syslog',
           owner: 'root',
           group: 'adm',
@@ -720,7 +744,7 @@
           owner: 'root',
           group: 'adm',
           permissions: '-rw-r-----',
-          content: 'Jan 01 00:00:03 weblinux sshd[100]: Accepted key for user from 127.0.0.1\n',
+          content: 'Jan 01 00:00:03 weblinux sshd[100]: Accepted key for pass from 127.0.0.1\n',
         },
       ],
       virtualFiles: [
@@ -751,6 +775,15 @@
           kind: 'runtime',
           readOnly: true,
         },
+        {
+          path: '/proc/uptime',
+          owner: 'root',
+          group: 'root',
+          permissions: '-r--r--r--',
+          generator: 'proc.uptime',
+          kind: 'runtime',
+          readOnly: true,
+        },
       ],
       devices: [
         {
@@ -775,7 +808,7 @@
         },
         {
           path: '/dev/tty',
-          owner: 'user',
+          owner: 'pass',
           group: 'tty',
           permissions: 'crw-rw-rw-',
           generator: 'device.tty',
@@ -818,6 +851,7 @@
     read,
     write,
     append,
+    touch,
     mkdir,
     rm,
     cp,
@@ -830,7 +864,7 @@
     _mkdirp: ensureDirectoryPath,
     _mkfile: ensureFilePath,
     _mkvirtual: ensureVirtualPath,
-    _mkdevice: (pathValue, deviceType, cwd = '/home/user', options = {}) => ensureVirtualPath(pathValue, deviceType || `device.${options.device || 'unknown'}`, cwd, {
+    _mkdevice: (pathValue, deviceType, cwd = DEFAULT_HOME, options = {}) => ensureVirtualPath(pathValue, deviceType || `device.${options.device || 'unknown'}`, cwd, {
       ...options,
       kind: 'device',
       device: options.device || deviceType || null,
@@ -841,6 +875,11 @@
     appendDeviceBuffer,
     getDeviceBuffer,
     createNode,
+    normalizePath,
+    resolvePath,
+    joinPath,
+    dirname,
+    basename,
   };
 
   reset();

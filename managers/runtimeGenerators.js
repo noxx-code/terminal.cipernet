@@ -27,60 +27,42 @@
   }
 
   function buildProcVersion() {
-    const browser = globalScope.navigator ? globalScope.navigator.userAgent : 'browser';
-    return [
-      'Linux version 6.8.0-browser-vfs (builder@terminal.cipernet) #1 SMP PREEMPT_DYNAMIC',
-      `Built for browser runtime at ${now()}`,
-      `User agent: ${browser}`,
-    ].join('\n');
+    return 'WEBLINUX Kernel 1.0.0';
   }
 
   function buildProcMeminfo() {
-    const nav = globalScope.navigator || {};
     const perf = globalScope.performance || {};
-    const deviceMemoryGb = typeof nav.deviceMemory === 'number' ? nav.deviceMemory : 4;
-    const totalBytes = Math.max(256 * 1024 * 1024, Math.floor(deviceMemoryGb * 1024 * 1024 * 1024));
-    const usedBytes = perf.memory && typeof perf.memory.usedJSHeapSize === 'number'
-      ? perf.memory.usedJSHeapSize
-      : Math.floor(totalBytes * 0.28);
-    const freeBytes = Math.max(0, totalBytes - usedBytes);
-    const availableBytes = Math.max(freeBytes, Math.floor(totalBytes * 0.6));
+    const usedMb = perf.memory && typeof perf.memory.usedJSHeapSize === 'number'
+      ? Math.max(256, Math.floor(perf.memory.usedJSHeapSize / (1024 * 1024)))
+      : 1024;
+    const totalMb = 4096;
+    const freeMb = Math.max(0, totalMb - usedMb);
+    const availableMb = Math.max(freeMb, 2048);
 
     return [
-      `MemTotal:       ${formatBytes(Math.floor(totalBytes / 1024))}`,
-      `MemFree:        ${formatBytes(Math.floor(freeBytes / 1024))}`,
-      `MemAvailable:   ${formatBytes(Math.floor(availableBytes / 1024))}`,
-      `Buffers:        ${formatBytes(Math.floor(totalBytes * 0.03 / 1024))}`,
-      `Cached:         ${formatBytes(Math.floor(totalBytes * 0.12 / 1024))}`,
-      'SwapTotal:      0 kB',
-      'SwapFree:       0 kB',
+      'MemTotal: 4096 MB',
+      `MemFree: ${freeMb} MB`,
+      `MemAvailable: ${availableMb} MB`,
+      'Buffers: 128 MB',
+      'Cached: 512 MB',
     ].join('\n');
   }
 
   function buildProcCpuinfo() {
-    const nav = globalScope.navigator || {};
-    const cores = Math.max(1, Math.min(32, nav.hardwareConcurrency || 4));
-    const lines = [];
+    return [
+      'processor : 0',
+      'model name : WEBLINUX Virtual CPU',
+      'cpu cores : 1',
+      'flags : fpu vme de pse tsc msr pae mce cx8 apic sep mtrr',
+    ].join('\n');
+  }
 
-    for (let index = 0; index < cores; index++) {
-      lines.push(`processor\t: ${index}`);
-      lines.push('vendor_id\t: GenuineIntel');
-      lines.push('cpu family\t: 6');
-      lines.push('model\t\t: 143');
-      lines.push('model name\t: Browser Virtual CPU');
-      lines.push('stepping\t: 10');
-      lines.push('microcode\t: 0x1');
-      lines.push('cpu MHz\t\t: 2400.000');
-      lines.push('cache size\t: 8192 KB');
-      lines.push('physical id\t: 0');
-      lines.push('siblings\t: ' + cores);
-      lines.push('core id\t\t: ' + index);
-      lines.push('cpu cores\t: ' + cores);
-      lines.push('flags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr');
-      lines.push('');
-    }
-
-    return lines.join('\n').trim();
+  function buildProcUptime(context) {
+    const startedAt = context && context.state && typeof context.state.runtimeStartedAt === 'number'
+      ? context.state.runtimeStartedAt
+      : Date.now();
+    const uptime = Math.max(0, (Date.now() - startedAt) / 1000).toFixed(2);
+    return `${uptime} ${uptime}`;
   }
 
   const generators = {
@@ -96,6 +78,11 @@
     },
     'proc.cpuinfo': {
       read: () => buildProcCpuinfo(),
+      write: () => false,
+      readOnly: true,
+    },
+    'proc.uptime': {
+      read: (context) => buildProcUptime(context),
       write: () => false,
       readOnly: true,
     },
