@@ -12,10 +12,11 @@
   }
 
   function appendText(base, extra) {
+    if (!base) return extra || "";
     if (!extra) return base;
-    if (!base) return extra;
     return `${base}\n${extra}`;
   }
+  
 
   class ShellExecutor {
     constructor(options) {
@@ -69,10 +70,37 @@
     }
 
     async executeRedirect(node, context) {
+      const vfs = context && context.vfs;
+      const cwd = context && typeof context.cwd === "string" ? context.cwd : "/";
+      const targetAbs = vfs && typeof vfs.resolvePath === "function"
+        ? vfs.resolvePath(node.target, cwd)
+        : node.target;
+
+      if (node.mode === "<") {
+        if (!vfs || typeof vfs.read !== "function") {
+          return normalizeResult({
+            stdout: "",
+            stderr: "shell: redirect failed: VFS is unavailable",
+            exitCode: 1,
+          });
+        }
+
+        const input = vfs.read(targetAbs, "/");
+        if (input === null) {
+          return normalizeResult({
+            stdout: "",
+            stderr: `shell: redirect failed: ${node.target}: No such file or directory`,
+            exitCode: 1,
+          });
+        }
+
+        const inputContext = Object.assign({}, context, { stdin: input });
+        return normalizeResult(await this.execute(node.command, inputContext));
+      }
+
       const result = await this.execute(node.command, context);
 
       if (result.stdout) {
-        const vfs = context && context.vfs;
         if (!vfs || (typeof vfs.write !== "function" && typeof vfs.append !== "function")) {
           return normalizeResult({
             stdout: "",
@@ -81,10 +109,30 @@
           });
         }
 
-        const cwd = context && typeof context.cwd === "string" ? context.cwd : "/";
+        // Permission check: ensure writing is allowed for the effective user
+        try {
+          const permissions = globalScope.WebLinuxPermissions || null;
+          const user = context && typeof context.user === 'string'
+            ? context.user
+            : (context && context.terminalState && context.terminalState.isRoot ? 'root' : 'pass');
+          if (permissions && typeof vfs.getN === 'function') {
+            const targetNode = vfs.getN(targetAbs, '/');
+            const parentNode = vfs.getN(vfs.dirname(targetAbs, '/'), '/');
+            if (targetNode && !permissions.canWrite(targetNode, user, context)) {
+              return normalizeResult({ stdout: '', stderr: 'shell: redirect failed: Permission denied', exitCode: 1 });
+            }
+            if (!targetNode && parentNode && !permissions.canWrite(parentNode, user, context)) {
+              return normalizeResult({ stdout: '', stderr: 'shell: redirect failed: Permission denied', exitCode: 1 });
+            }
+          }
+        } catch (e) {
+          console.warn('Shell redirect permission check failed:', e);
+          return normalizeResult({ stdout: '', stderr: 'shell: redirect failed: Permission denied', exitCode: 1 });
+        }
+
         const ok = node.mode === ">>"
-          ? vfs.append(node.target, cwd, result.stdout)
-          : vfs.write(node.target, cwd, result.stdout);
+          ? vfs.append(targetAbs, "/", result.stdout)
+          : vfs.write(targetAbs, "/", result.stdout);
 
         if (!ok) {
           return normalizeResult({

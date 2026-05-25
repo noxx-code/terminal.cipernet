@@ -81,6 +81,18 @@ const VFSManager = (() => {
         });
       }
     }
+
+    if (vfsState.executables && Array.isArray(vfsState.executables)) {
+      for (const executableEntry of vfsState.executables) {
+        const { path, command, permissions, owner, group, content } = executableEntry;
+        VFS._mkexecutable(path, command, '/', {
+          permissions,
+          owner,
+          group,
+          content,
+        });
+      }
+    }
   }
 
   /**

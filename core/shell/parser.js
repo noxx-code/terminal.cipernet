@@ -66,6 +66,8 @@
         return ">";
       case TOKEN_TYPES.REDIRECT_APPEND:
         return ">>";
+      case TOKEN_TYPES.REDIRECT_IN:
+        return "<";
       case TOKEN_TYPES.SEMICOLON:
         return ";";
       case TOKEN_TYPES.WORD:
@@ -133,12 +135,13 @@
     let node = parseCommand(stream);
 
     while (true) {
+      const redirectIn = stream.match(TOKEN_TYPES.REDIRECT_IN);
       const redirectOut = stream.match(TOKEN_TYPES.REDIRECT_OUT);
       const redirectAppend = stream.match(TOKEN_TYPES.REDIRECT_APPEND);
 
-      if (!redirectOut && !redirectAppend) break;
+      if (!redirectIn && !redirectOut && !redirectAppend) break;
 
-      const mode = redirectAppend ? ">>" : ">";
+      const mode = redirectIn ? "<" : (redirectAppend ? ">>" : ">");
       const targetToken = stream.next();
 
       if (!targetToken || (targetToken.type !== TOKEN_TYPES.WORD && targetToken.type !== TOKEN_TYPES.STRING)) {

@@ -22,7 +22,11 @@
     }
 
     async run(input, context) {
-      const source = String(input || "").trim();
+      const rawSource = String(input || "");
+      const expandedSource = context && typeof context.expandInput === 'function'
+        ? String(context.expandInput(rawSource) || "")
+        : rawSource;
+      const source = expandedSource.trim();
       if (!source) {
         return { stdout: "", stderr: "", exitCode: 0, control: "" };
       }

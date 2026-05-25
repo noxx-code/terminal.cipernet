@@ -19,6 +19,7 @@
     if (permissions) return permissions;
     if (type === 'directory') return 'drwxr-xr-x';
     if (type === 'virtual') return '-r--r--r--';
+    if (type === 'executable') return '-rwxr-xr-x';
     return '-rw-r--r--';
   }
 
@@ -30,8 +31,8 @@
       parent: options.parent || null,
       type,
       permissions: normalizePermissions(type, options.permissions),
-      owner: options.owner || (type === 'directory' ? 'root' : 'user'),
-      group: options.group || (type === 'directory' ? 'root' : 'user'),
+      owner: options.owner || 'pass',
+      group: options.group || 'pass',
       children: type === 'directory' ? {} : null,
       createdAt,
       modifiedAt: options.modifiedAt || createdAt,
@@ -50,6 +51,12 @@
         node.modifiedAt = now();
         return true;
       };
+    } else if (type === 'executable') {
+      node.command = options.command || name;
+      node.content = options.content !== undefined && options.content !== null ? String(options.content) : '';
+      node.size = typeof options.size === 'number' ? options.size : node.content.length;
+      node.read = () => node.content;
+      node.write = () => false;
     } else if (type === 'directory') {
       node.read = () => null;
       node.write = () => false;
@@ -89,6 +96,7 @@
       generator: node.generator,
       device: node.device,
       readOnly: node.readOnly,
+      command: node.command,
     });
 
     if (node.type === 'directory' && node.children) {
@@ -296,6 +304,31 @@
       generator: generatorKey || null,
       device: options.device || null,
       readOnly: options.readOnly,
+      createdAt: options.createdAt,
+      modifiedAt: options.modifiedAt,
+    });
+    parent.children[name] = node;
+    assignPaths(state.root, '/', null);
+    return node;
+  }
+
+  function ensureExecutablePath(pathValue, commandName, cwd = DEFAULT_HOME, options = {}) {
+    const targetPath = normalizePath(pathValue, cwd);
+    if (targetPath === '/') return null;
+
+    const parentPath = dirname(targetPath, '/');
+    const name = basename(targetPath, '/');
+    const parent = ensureDirectoryPath(parentPath, '/', options.parent || {});
+    if (!parent) return null;
+
+    const node = createNode(name, 'executable', {
+      path: targetPath,
+      parent,
+      command: commandName || name,
+      permissions: options.permissions,
+      owner: options.owner,
+      group: options.group,
+      content: options.content,
       createdAt: options.createdAt,
       modifiedAt: options.modifiedAt,
     });
@@ -630,6 +663,9 @@
     const deviceEntries = Array.isArray(manifest.devices)
       ? manifest.devices.map((entry) => normalizeManifestEntry(entry, 'virtual')).filter(Boolean)
       : [];
+    const executableEntries = Array.isArray(manifest.executables)
+      ? manifest.executables.map((entry) => normalizeManifestEntry(entry, 'executable')).filter(Boolean)
+      : [];
 
     for (const entry of directoryEntries) {
       ensureDirectoryPath(entry.path, '/', entry);
@@ -676,6 +712,19 @@
       ensureVirtualPath(entry.path, options.generator || null, '/', options);
     }
 
+    for (const entry of executableEntries) {
+      const options = {
+        owner: entry.owner,
+        group: entry.group,
+        permissions: entry.permissions,
+        command: entry.command || entry.executable || entry.name || basename(entry.path, '/'),
+        content: entry.content,
+        createdAt: entry.createdAt,
+        modifiedAt: entry.modifiedAt,
+      };
+      ensureExecutablePath(entry.path, options.command, '/', options);
+    }
+
     state.bootstrapped = true;
     assignPaths(state.root, '/');
     return true;
@@ -693,8 +742,9 @@
         { path: '/lib', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/opt', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/proc', owner: 'root', group: 'root', permissions: 'dr-xr-xr-x' },
+        { path: '/root', owner: 'root', group: 'root', permissions: 'drwx------' },
         { path: '/sbin', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
-        { path: '/tmp', owner: 'root', group: 'root', permissions: 'drwxrwxrwt' },
+        { path: '/tmp', owner: 'root', group: 'root', permissions: 'drwxrwxrwx' },
         { path: '/usr', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/usr/bin', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
         { path: '/usr/local', owner: 'root', group: 'root', permissions: 'drwxr-xr-x' },
@@ -704,6 +754,13 @@
         { path: '/home/pass', owner: 'pass', group: 'pass', permissions: 'drwxr-xr-x' },
       ],
       files: [
+        {
+          path: '/etc/shadow',
+          owner: 'root',
+          group: 'root',
+          permissions: '-rw-------',
+          content: 'root:$6$hash...\npass:$6$hash...\n',
+        },
         {
           path: '/etc/passwd',
           owner: 'root',
@@ -817,6 +874,17 @@
           readOnly: false,
         },
       ],
+      executables: [
+        { path: '/bin/ls', command: 'ls', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/cat', command: 'cat', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/grep', command: 'grep', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/echo', command: 'echo', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/pwd', command: 'pwd', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/mkdir', command: 'mkdir', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/rm', command: 'rm', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/cp', command: 'cp', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+        { path: '/bin/mv', command: 'mv', owner: 'root', group: 'root', permissions: '-rwxr-xr-x' },
+      ],
     };
   }
 
@@ -864,6 +932,7 @@
     _mkdirp: ensureDirectoryPath,
     _mkfile: ensureFilePath,
     _mkvirtual: ensureVirtualPath,
+    _mkexecutable: ensureExecutablePath,
     _mkdevice: (pathValue, deviceType, cwd = DEFAULT_HOME, options = {}) => ensureVirtualPath(pathValue, deviceType || `device.${options.device || 'unknown'}`, cwd, {
       ...options,
       kind: 'device',

@@ -6,6 +6,7 @@
     STRING: "STRING",
     PIPE: "PIPE",
     OR: "OR",
+    REDIRECT_IN: "REDIRECT_IN",
     REDIRECT_OUT: "REDIRECT_OUT",
     REDIRECT_APPEND: "REDIRECT_APPEND",
     AND: "AND",
@@ -17,7 +18,7 @@
   }
 
   function isOperatorStart(char) {
-    return char === "|" || char === ">" || char === "&" || char === ";";
+    return char === "|" || char === ">" || char === "<" || char === "&" || char === ";";
   }
 
   function tokenize(input) {
@@ -121,6 +122,12 @@
       if (char === ">" && source[index + 1] === ">") {
         pushToken(TOKEN_TYPES.REDIRECT_APPEND);
         index += 2;
+        continue;
+      }
+
+      if (char === "<") {
+        pushToken(TOKEN_TYPES.REDIRECT_IN);
+        index += 1;
         continue;
       }
 

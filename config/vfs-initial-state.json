@@ -11,8 +11,9 @@
     { "path": "/lib", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/opt", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/proc", "owner": "root", "group": "root", "permissions": "dr-xr-xr-x" },
+    { "path": "/root", "owner": "root", "group": "root", "permissions": "drwx------" },
     { "path": "/sbin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
-    { "path": "/tmp", "owner": "root", "group": "root", "permissions": "drwxrwxrwt" },
+    { "path": "/tmp", "owner": "root", "group": "root", "permissions": "drwxrwxrwx" },
     { "path": "/usr", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/usr/bin", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
     { "path": "/usr/local", "owner": "root", "group": "root", "permissions": "drwxr-xr-x" },
@@ -22,6 +23,7 @@
     { "path": "/home/pass", "owner": "pass", "group": "pass", "permissions": "drwxr-xr-x" }
   ],
   "files": [
+    { "path": "/etc/shadow", "owner": "root", "group": "root", "permissions": "-rw-------", "content": "root:$6$hash...\npass:$6$hash...\n" },
     { "path": "/etc/passwd", "owner": "root", "group": "root", "permissions": "-rw-r--r--", "content": "root:x:0:0:root:/root:/bin/bash\npass:x:1000:1000:Pass:/home/pass:/bin/bash\n" },
     { "path": "/etc/hostname", "owner": "root", "group": "root", "permissions": "-rw-r--r--", "content": "weblinux" },
     { "path": "/etc/hosts", "owner": "root", "group": "root", "permissions": "-rw-r--r--", "content": "127.0.0.1 localhost\n127.0.1.1 weblinux\n::1 localhost ip6-localhost ip6-loopback\n" },
@@ -39,5 +41,16 @@
     { "path": "/dev/null", "owner": "root", "group": "root", "permissions": "crw-rw-rw-", "generator": "device.null", "device": "null", "kind": "device", "readOnly": false },
     { "path": "/dev/random", "owner": "root", "group": "root", "permissions": "crw-rw-rw-", "generator": "device.random", "device": "random", "kind": "device", "readOnly": false },
     { "path": "/dev/tty", "owner": "pass", "group": "tty", "permissions": "crw-rw-rw-", "generator": "device.tty", "device": "tty", "kind": "device", "readOnly": false }
+  ],
+  "executables": [
+    { "path": "/bin/ls", "command": "ls", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/cat", "command": "cat", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/grep", "command": "grep", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/echo", "command": "echo", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/pwd", "command": "pwd", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/mkdir", "command": "mkdir", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/rm", "command": "rm", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/cp", "command": "cp", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" },
+    { "path": "/bin/mv", "command": "mv", "owner": "root", "group": "root", "permissions": "-rwxr-xr-x" }
   ]
 }

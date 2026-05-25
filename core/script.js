@@ -30,8 +30,118 @@ function updateStatusCwd(cwd) {
   }
 }
 
+function getRuntimeUser(state) {
+  if (state && state.isRoot) return 'root';
+  if (state && typeof state.user === 'string' && state.user) return state.user;
+  if (window.WebLinuxPermissions && typeof window.WebLinuxPermissions.getCurrentUser === 'function') {
+    return window.WebLinuxPermissions.getCurrentUser(state);
+  }
+  return window.weblinuxSessionUser || 'pass';
+}
+
+function getPermissionHelper() {
+  return window.WebLinuxPermissions || null;
+}
+
+function getRuntimeEnv(state) {
+  const runtimeState = state || {};
+  if (!runtimeState.env || typeof runtimeState.env !== 'object') {
+    runtimeState.env = {
+      PATH: '/bin:/usr/bin:/usr/local/bin',
+      HOME: '/home/pass',
+      USER: 'pass',
+      SHELL: '/bin/bash',
+      PWD: runtimeState && typeof runtimeState.cwd === 'string' ? runtimeState.cwd : '/home/pass',
+      HOSTNAME: 'weblinux',
+      TERM: 'xterm-256color',
+      LANG: 'en_US.UTF-8',
+    };
+  }
+
+  const isRoot = !!runtimeState.isRoot;
+  runtimeState.env.USER = isRoot ? 'root' : getRuntimeUser(runtimeState);
+  runtimeState.env.HOME = isRoot ? '/root' : '/home/pass';
+  runtimeState.env.PWD = runtimeState && typeof runtimeState.cwd === 'string' ? runtimeState.cwd : '/home/pass';
+  if (!runtimeState.env.PATH) runtimeState.env.PATH = '/bin:/usr/bin:/usr/local/bin';
+  return runtimeState.env;
+}
+
+function expandShellVariables(input, state) {
+  const source = String(input || '');
+  if (!source.includes('$')) return source;
+
+  const env = getRuntimeEnv(state);
+  let result = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+
+    if (ch === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      result += ch;
+      continue;
+    }
+
+    if (ch === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      result += ch;
+      continue;
+    }
+
+    if (ch === '\\' && i + 1 < source.length) {
+      result += ch + source[i + 1];
+      i += 1;
+      continue;
+    }
+
+    if (ch === '$' && !inSingleQuote) {
+      const next = source[i + 1] || '';
+      if (!/[A-Za-z_]/.test(next)) {
+        result += ch;
+        continue;
+      }
+
+      let j = i + 1;
+      while (j < source.length && /[A-Za-z0-9_]/.test(source[j])) j += 1;
+      const key = source.slice(i + 1, j);
+      result += Object.prototype.hasOwnProperty.call(env, key) ? String(env[key]) : '';
+      i = j - 1;
+      continue;
+    }
+
+    result += ch;
+  }
+
+  return result;
+}
+
+function formatMode(mode, type) {
+  const value = String(mode || '');
+  if (/^[01]?[0-7]{3}$/.test(value)) {
+    const digits = value.length === 4 ? value.slice(1) : value;
+    const bits = digits.split('').map((digit) => {
+      const numeric = parseInt(digit, 10);
+      return `${numeric & 4 ? 'r' : '-'}${numeric & 2 ? 'w' : '-'}${numeric & 1 ? 'x' : '-'}`;
+    }).join('');
+    return `${type === 'directory' ? 'd' : '-'}${bits}`;
+  }
+  return value;
+}
+
+function displayPermissions(node) {
+  if (!node || !node.permissions) {
+    if (node && node.type === 'directory') return 'drwxr-xr-x';
+    if (node && node.type === 'executable') return '-rwxr-xr-x';
+    return '-rw-r--r--';
+  }
+  return formatMode(node.permissions, node.type);
+}
+
 window.__weblinuxLoginComplete = false;
 window.weblinuxSessionUser = window.weblinuxSessionUser || 'pass';
+window.weblinuxSession = window.weblinuxSession || null;
 window.__weblinuxInputManager = null;
 window.__weblinuxTerminalState = null;
 
@@ -54,10 +164,15 @@ const WebLinuxAuth = (() => {
   }
 
   function writeRecord(username, password) {
+    window.weblinuxSession = {
+      username: username || 'pass',
+      password: password || '',
+    };
+
     try {
+      // Persist only the username; keep the password in memory so sudo still works.
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        username: username || 'pass',
-        password: password || '',
+        username: window.weblinuxSession.username,
       }));
     } catch (error) {
       return false;
@@ -67,6 +182,10 @@ const WebLinuxAuth = (() => {
   }
 
   function getPassword() {
+    if (window.weblinuxSession && typeof window.weblinuxSession.password === 'string') {
+      return window.weblinuxSession.password;
+    }
+
     const record = readRecord();
     return record ? record.password : '';
   }
@@ -189,6 +308,9 @@ const LoginScreen = (() => {
     const terminalState = window.__weblinuxTerminalState;
 
     window.weblinuxSessionUser = username || 'pass';
+    if (window.WebLinuxUsers && typeof window.WebLinuxUsers.setCurrentUser === 'function') {
+      window.WebLinuxUsers.setCurrentUser(window.weblinuxSessionUser);
+    }
 
     if (terminalElement) terminalElement.innerHTML = '';
 
@@ -686,21 +808,70 @@ function manApropos(term){
 
 /* ====== COMMANDS ====== */
 const C={};
-function fmtL(e){const pm=e.permissions||(e.type==='directory'?'drwxr-xr-x':'-rw-r--r--');const lk=e.type==='directory'?'2':'1';const ow=(e.owner||'user').padEnd(6);const gr=(e.group||'user').padEnd(6);const sz=String(e.size||0).padStart(6);const d=new Date(e.modifiedAt||Date.now());const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];const ds=`${mo[d.getMonth()]} ${String(d.getDate()).padStart(2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;const cl=e.type==='directory'?'\x1b[1;34m':'';const rs=e.type==='directory'?'\x1b[0m':'';return`${pm} ${lk} ${ow} ${gr} ${sz} ${ds} ${cl}${e.name}${rs}`}
+const SHELL_BUILTINS = new Set(['cd', 'export', 'exit', 'pwd', 'history', 'alias', 'unset']);
+function fmtL(e){const pm=displayPermissions(e);const lk=e.type==='directory'?'2':'1';const ow=(e.owner||'pass').padEnd(6);const gr=(e.group||'pass').padEnd(6);const sz=String(e.size||0).padStart(6);const d=new Date(e.modifiedAt||Date.now());const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];const ds=`${mo[d.getMonth()]} ${String(d.getDate()).padStart(2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;const cl=e.type==='directory'?'\x1b[1;34m':'';const rs=e.type==='directory'?'\x1b[0m':'';return`${pm} ${lk} ${ow} ${gr} ${sz} ${ds} ${cl}${e.name}${rs}`}
 function resolveFsPath(pathValue, cwd){return VFS.resolvePath(pathValue, cwd);}
 function resolveFsNode(pathValue, cwd){return VFS.getN(resolveFsPath(pathValue, cwd), '/');}
 function resolveFsParent(pathValue, cwd){const absolutePath=resolveFsPath(pathValue, cwd);return{path:absolutePath,parentPath:VFS.dirname(absolutePath,'/'),node:resolveFsNode(absolutePath,'/'),parentNode:resolveFsNode(VFS.dirname(absolutePath,'/'),'/')};}
 
+// Resolve a shell command through PATH into an executable VFS node.
+function findExecutable(commandName, state) {
+  if (!commandName || typeof commandName !== 'string') return null;
+
+  const runtimeState = state || null;
+  const env = getRuntimeEnv(runtimeState);
+  const baseCwd = runtimeState && typeof runtimeState.cwd === 'string' ? runtimeState.cwd : '/';
+
+  const candidatePaths = commandName.includes('/')
+    ? [VFS.resolvePath(commandName, baseCwd)]
+    : String(env.PATH || '').split(':').filter(Boolean).map((dir) => `${dir.replace(/\/$/, '')}/${commandName}`);
+
+  let deniedMatch = null;
+
+  for (const candidatePath of candidatePaths) {
+    const node = VFS.getN(candidatePath, baseCwd);
+    if (!node || (node.type !== 'executable' && node.type !== 'file')) continue;
+    if (!hasExecutePermission(node, runtimeState)) {
+      deniedMatch = { path: candidatePath, node, command: node.command || commandName, permissionDenied: true };
+      continue;
+    }
+    return { path: candidatePath, node, command: node.command || commandName, permissionDenied: false };
+  }
+
+  return deniedMatch;
+}
+
+function hasExecutePermission(node, state) {
+  if (!node) return false;
+
+  const user = getRuntimeUser(state);
+  if (user === 'root') return true;
+
+  const permissionsHelper = getPermissionHelper();
+  if (permissionsHelper && typeof permissionsHelper.isProtectedPath === 'function' && permissionsHelper.isProtectedPath(node.path)) {
+    return false;
+  }
+
+  const permissions = String(node.permissions || '');
+  if (!permissions || permissions.length < 10) return true;
+
+  const ownerBits = permissions.slice(1, 4);
+  const groupBits = permissions.slice(4, 7);
+  const otherBits = permissions.slice(7, 10);
+  const bits = user === node.owner ? ownerBits : (user === node.group ? groupBits : otherBits);
+  return bits[2] === 'x';
+}
+
 C.pwd=(a,s)=>resolveFsPath(s.cwd, '/');
-C.ls=(args,s)=>{let sa=false,lo=false;const paths=[];for(const a of args){if(a.startsWith('-')){if(a.includes('a'))sa=true;if(a.includes('l'))lo=true}else paths.push(a)}if(!paths.length)paths.push('.');const res=[];for(const p of paths){const target=resolveFsPath(p,s.cwd);const nd=resolveFsNode(target,'/');if(!nd)return`ls: cannot access '${p}': No such file or directory`;if(nd.type==='file'){res.push(lo?fmtL(nd):nd.name);continue}let ent=Object.values(nd.children);if(sa)ent=[{name:'.',type:'directory',permissions:nd.permissions,owner:nd.owner,group:nd.group,size:4096,modifiedAt:nd.modifiedAt},{name:'..',type:'directory',permissions:'drwxr-xr-x',owner:'root',group:'root',size:4096,modifiedAt:nd.modifiedAt},...ent];else ent=ent.filter(e=>!e.name.startsWith('.'));if(paths.length>1)res.push(p+':');if(lo){res.push('total '+ent.length*4);for(const e of ent)res.push(fmtL(e))}else res.push(ent.map(e=>e.type==='directory'?`\x1b[1;34m${e.name}\x1b[0m`:e.name).join('  '))}return res.join('\n')};
-C.cd=(args,s)=>{const t=args[0]||'~';const abs=resolveFsPath(t,s.cwd);const nd=resolveFsNode(abs,'/');if(!nd)return{stdout:'',stderr:`bash: cd: ${t}: No such file or directory\n`,exitCode:1};if(nd.type!=='directory')return{stdout:'',stderr:`bash: cd: ${t}: Not a directory\n`,exitCode:1};s.cwd=abs||'/';return{stdout:'',stderr:'',exitCode:0}};
-C.mkdir=(args,s)=>{if(!args.length)return'mkdir: missing operand';let mp=false;const dirs=[];for(const a of args){if(a==='-p')mp=true;else dirs.push(a)}const r=[];for(const d of dirs){if(mp){const target=resolveFsPath(d,s.cwd);VFS.ensureDirectoryPath(target,'/')}else{const e=VFS.mkdir(resolveFsPath(d,s.cwd),'/');if(e)r.push(e)}}return r.join('\n')};
-C.rmdir=(args,s)=>{if(!args.length)return'rmdir: missing operand';const r=[];for(const a of args){const target=resolveFsPath(a,s.cwd);const n=resolveFsNode(target,'/');if(!n){r.push(`rmdir: '${a}': No such file or directory`);continue}if(n.type!=='directory'){r.push(`rmdir: '${a}': Not a directory`);continue}if(Object.keys(n.children).length>0){r.push(`rmdir: '${a}': Directory not empty`);continue}VFS.rm(target,'/')}return r.join('\n')};
-C.rm=(args,s)=>{let rec=false,force=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r')||a.includes('R'))rec=true;if(a.includes('f'))force=true}else files.push(a)}if(!files.length)return force?'':'rm: missing operand';const r=[];for(const f of files){const e=VFS.rm(resolveFsPath(f,s.cwd),'/',rec);if(e&&!force)r.push(e)}return r.join('\n')};
+C.ls=(args,s)=>{let sa=false,lo=false;const paths=[];for(const a of args){if(a.startsWith('-')){if(a.includes('a'))sa=true;if(a.includes('l'))lo=true}else paths.push(a)}if(!paths.length)paths.push('.');const perms=getPermissionHelper();const res=[];for(const p of paths){const target=resolveFsPath(p,s.cwd);const nd=resolveFsNode(target,'/');if(!nd)return`ls: cannot access '${p}': No such file or directory`;if(perms&&!perms.canRead(nd,getRuntimeUser(s),s))return`ls: cannot access '${p}': Permission denied`;if(nd.type==='file'){res.push(lo?fmtL(nd):nd.name);continue}let ent=Object.values(nd.children);if(sa)ent=[{name:'.',type:'directory',permissions:nd.permissions,owner:nd.owner,group:nd.group,size:4096,modifiedAt:nd.modifiedAt},{name:'..',type:'directory',permissions:'drwxr-xr-x',owner:'root',group:'root',size:4096,modifiedAt:nd.modifiedAt},...ent];else ent=ent.filter(e=>!e.name.startsWith('.'));if(paths.length>1)res.push(p+':');if(lo){res.push('total '+ent.length*4);for(const e of ent)res.push(fmtL(e))}else res.push(ent.map(e=>e.type==='directory'?`\x1b[1;34m${e.name}\x1b[0m`:e.name).join('  '))}return res.join('\n')};
+C.cd=(args,s)=>{const t=args[0]||'~';const abs=resolveFsPath(t,s.cwd);const nd=resolveFsNode(abs,'/');const perms=getPermissionHelper();if(!nd)return{stdout:'',stderr:`bash: cd: ${t}: No such file or directory\n`,exitCode:1};if(nd.type!=='directory')return{stdout:'',stderr:`bash: cd: ${t}: Not a directory\n`,exitCode:1};if(perms&&!perms.canExecute(nd,getRuntimeUser(s),s))return{stdout:'',stderr:`bash: cd: ${t}: Permission denied\n`,exitCode:1};s.cwd=abs||'/';return{stdout:'',stderr:'',exitCode:0}};
+C.mkdir=(args,s)=>{if(!args.length)return'mkdir: missing operand';let mp=false;const dirs=[];for(const a of args){if(a==='-p')mp=true;else dirs.push(a)}const perms=getPermissionHelper();const r=[];for(const d of dirs){const target=resolveFsPath(d,s.cwd);const parent=resolveFsNode(VFS.dirname(target,'/'),'/');if(perms&&parent&&!perms.canWrite(parent,getRuntimeUser(s),s)){r.push(`mkdir: cannot create directory '${d}': Permission denied`);continue}if(mp){VFS.ensureDirectoryPath(target,'/')}else{const e=VFS.mkdir(target,'/');if(e)r.push(e)}}return r.join('\n')};
+C.rmdir=(args,s)=>{if(!args.length)return'rmdir: missing operand';const r=[];const perms=getPermissionHelper();for(const a of args){const target=resolveFsPath(a,s.cwd);const n=resolveFsNode(target,'/');const parentPath=VFS.dirname(target,'/');const parent=resolveFsNode(parentPath,'/');if(!n){r.push(`rmdir: '${a}': No such file or directory`);continue}if(n.type!=='directory'){r.push(`rmdir: '${a}': Not a directory`);continue}if(perms&&parent&&!perms.canWrite(parent,getRuntimeUser(s),s)){r.push(`rmdir: '${a}': Permission denied`);continue}if(Object.keys(n.children).length>0){r.push(`rmdir: '${a}': Directory not empty`);continue}const unlinkRef=VFS.getPN(target,'/');if(!unlinkRef.parent||unlinkRef.parent.type!=='directory'||!unlinkRef.parent.children[unlinkRef.name]){r.push(`rmdir: '${a}': No such file or directory`);continue}delete unlinkRef.parent.children[unlinkRef.name];}return r.join('\n')};
+C.rm=(args,s)=>{let rec=false,force=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r')||a.includes('R'))rec=true;if(a.includes('f'))force=true}else files.push(a)}if(!files.length)return force?'':'rm: missing operand';const perms=getPermissionHelper();const r=[];for(const f of files){const target=resolveFsPath(f,s.cwd);const node=resolveFsNode(target,'/');const parent=resolveFsNode(VFS.dirname(target,'/'),'/');if(perms&&node&&!perms.canWrite(node,getRuntimeUser(s),s)&&(!parent||!perms.canWrite(parent,getRuntimeUser(s),s))){r.push(`rm: cannot remove '${f}': Permission denied`);continue}const e=VFS.rm(target,'/',rec);if(e&&!force)r.push(e)}return r.join('\n')};
 C.cp=(args,s)=>{const nf=args.filter(a=>!a.startsWith('-'));if(nf.length<2)return'cp: missing operand';const dst=resolveFsPath(nf.pop(),s.cwd);const r=[];for(const src of nf){const e=VFS.cp(resolveFsPath(src,s.cwd),dst,'/');if(e)r.push(e)}return r.join('\n')};
 C.mv=(args,s)=>{const nf=args.filter(a=>!a.startsWith('-'));if(nf.length<2)return'mv: missing operand';const dst=resolveFsPath(nf.pop(),s.cwd);const r=[];for(const src of nf){const e=VFS.mv(resolveFsPath(src,s.cwd),dst,'/');if(e)r.push(e)}return r.join('\n')};
-C.touch=(args,s)=>{if(!args.length)return'touch: missing operand';const r=[];for(const a of args){if(a.startsWith('-'))continue;const ok=VFS.touch(resolveFsPath(a,s.cwd),'/');if(!ok)r.push(`touch: cannot touch '${a}': No such file or directory`)}return r.join('\n')};
-C.cat=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'cat: missing file operand';const r=[];for(const a of args){if(a.startsWith('-'))continue;const target=resolveFsPath(a,s.cwd);const c=VFS.read(target,'/');if(c===null){const n=resolveFsNode(target,'/');if(n&&n.type==='directory')r.push(`cat: ${a}: Is a directory`);else if(n&&n.type==='virtual')r.push('cat: invalid virtual node');else r.push(`cat: ${a}: No such file or directory`)}else r.push(c)}return r.join('\n')};
+C.touch=(args,s)=>{if(!args.length)return'touch: missing operand';const perms=getPermissionHelper();const r=[];for(const a of args){if(a.startsWith('-'))continue;const target=resolveFsPath(a,s.cwd);const node=resolveFsNode(target,'/');const parent=resolveFsNode(VFS.dirname(target,'/'),'/');if(node&&node.type==='directory'){r.push(`touch: cannot touch '${a}': Is a directory`);continue}if(perms&&node&&!perms.canWrite(node,getRuntimeUser(s),s)){r.push(`touch: cannot touch '${a}': Permission denied`);continue}if(perms&&!node&&parent&&!perms.canWrite(parent,getRuntimeUser(s),s)){r.push(`touch: cannot touch '${a}': Permission denied`);continue}const ok=VFS.touch(target,'/');if(!ok)r.push(`touch: cannot touch '${a}': No such file or directory`)}return r.join('\n')};
+C.cat=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'cat: missing file operand';const perms=getPermissionHelper();const r=[];for(const a of args){if(a.startsWith('-'))continue;const target=resolveFsPath(a,s.cwd);const node=resolveFsNode(target,'/');if(!node){r.push(`cat: ${a}: No such file or directory`);continue}if(node.type==='directory'){r.push(`cat: ${a}: Is a directory`);continue}if(perms&&!perms.canRead(node,getRuntimeUser(s),s)){r.push(`cat: ${a}: Permission denied`);continue}const c=VFS.read(target,'/');if(c===null&&node.type==='virtual')r.push('cat: invalid virtual node');else if(c===null)r.push(`cat: ${a}: No such file or directory`);else r.push(c)}return r.join('\n')};
 C.head=(args,s,stdin)=>{let n=10;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null)return stdin.split('\n').slice(0,n).join('\n');if(!files.length)return'head: missing operand';const r=[];for(const f of files){const target=resolveFsPath(f,s.cwd);const c=VFS.read(target,'/');if(c===null){r.push(`head: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);r.push(c.split('\n').slice(0,n).join('\n'))}return r.join('\n')};
 C.tail=(args,s,stdin)=>{let n=10,fol=false;const files=[];for(let i=0;i<args.length;i++){if(args[i]==='-n'&&args[i+1])n=parseInt(args[++i])||10;else if(args[i]==='-f')fol=true;else if(!args[i].startsWith('-'))files.push(args[i])}if(!files.length&&stdin!=null){const l=stdin.split('\n');return l.slice(Math.max(0,l.length-n)).join('\n')}if(!files.length)return'tail: missing operand';const r=[];for(const f of files){const target=resolveFsPath(f,s.cwd);const c=VFS.read(target,'/');if(c===null){r.push(`tail: '${f}': No such file`);continue}if(files.length>1)r.push(`==> ${f} <==`);const l=c.split('\n');r.push(l.slice(Math.max(0,l.length-n)).join('\n'))}if(fol)r.push('\x1b[33m[tail -f simulated]\x1b[0m');return r.join('\n')};
 C.less=(args,s,stdin)=>{if(!args.length&&stdin!=null)return stdin;if(!args.length)return'less: missing operand';const f=args.find(a=>!a.startsWith('-'));const target=resolveFsPath(f,s.cwd);const c=VFS.read(target,'/');if(c===null)return`${f}: No such file or directory`;return c+'\n\x1b[7m(END)\x1b[0m'};
@@ -708,8 +879,8 @@ C.nano=(args,s)=>{const target=args.find(a=>!a.startsWith('-'));if(!target)retur
 C.grep=(args,s,stdin)=>{let ic=false,ln=false,rec=false,inv=false,cnt=false;const pos=[];for(const a of args){if(a.startsWith('-')&&!a.startsWith('--')){if(a.includes('i'))ic=true;if(a.includes('n'))ln=true;if(a.includes('r'))rec=true;if(a.includes('v'))inv=true;if(a.includes('c'))cnt=true}else pos.push(a)}if(!pos.length)return{stdout:'',stderr:'grep: missing pattern\n',exitCode:2};const pat=pos[0];const files=pos.slice(1);let re;try{re=new RegExp(pat,ic?'i':'')}catch(e){return{stdout:'',stderr:`grep: Invalid regex: '${pat}'\n`,exitCode:2}}function gC(ct,fn,mf){const ls=String(ct).split('\n');const r=[];let count=0;for(let i=0;i<ls.length;i++){const rawLine=ls[i];const m=re.test(rawLine);if(m!==inv){count++;if(!cnt){let l=rawLine,px='';if(mf&&fn)px+=`\x1b[35m${fn}\x1b[0m:`;if(ln)px+=`\x1b[32m${i+1}\x1b[0m:`;if(!inv)l=l.replace(re,mv=>`\x1b[1;31m${mv}\x1b[0m`);r.push(px+l)}}}if(cnt)r.push((mf&&fn?fn+':':'')+count);return{lines:r,count}}if(!files.length){if(stdin==null)return{stdout:'',stderr:'grep: no input\n',exitCode:2};const hit=gC(stdin,null,false);return{stdout:hit.lines.length?`${hit.lines.join('\n')}\n`:'',stderr:'',exitCode:hit.count>0?0:1}}if(rec){const r=[];let total=0;for(const f of files){const found=VFS.findN(f,s.cwd,n=>n.type==='file');for(const path of found){const c=VFS.read(path,s.cwd);if(c!==null){const hit=gC(c,path,true);r.push(...hit.lines);total+=hit.count}}}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:'',exitCode:total>0?0:1}}const r=[];const errs=[];let total=0;const mf=files.length>1;for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){errs.push(`grep: ${f}: No such file or directory`);continue}const hit=gC(c,f,mf);r.push(...hit.lines);total+=hit.count}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:errs.length?`${errs.join('\n')}\n`:'',exitCode:errs.length?2:(total>0?0:1)}};
 C.find=(args,s)=>{let sp='.',np=null,tf=null;for(let i=0;i<args.length;i++){if(args[i]==='-name'&&args[i+1])np=args[++i];else if(args[i]==='-type'&&args[i+1])tf=args[++i];else if(!args[i].startsWith('-'))sp=args[i]}return VFS.findN(sp,s.cwd,(n)=>{if(np){const re=new RegExp('^'+np.replace(/\*/g,'.*').replace(/\?/g,'.')+'$');if(!re.test(n.name))return false}if(tf){if(tf==='f'&&n.type!=='file')return false;if(tf==='d'&&n.type!=='directory')return false}return true}).join('\n')};
 C.locate=(args,s)=>{if(!args.length)return'locate: no pattern';const re=new RegExp(args[0],'i');const r=VFS.findN('/',s.cwd,n=>re.test(n.name));return r.length?r.join('\n'):`locate: no results for '${args[0]}'`};
-C.which=(args)=>{if(!args.length)return'which: missing argument';return args.map(cmd=>C[cmd]?`/usr/bin/${cmd}`:`${cmd} not found`).join('\n')};
-C.chmod=(args,s)=>{if(args.length<2)return'chmod: missing operand';const n=VFS.getN(args[1],s.cwd);if(!n)return`chmod: '${args[1]}': No such file or directory`;if(/^\d{3,4}$/.test(args[0])){const d=args[0].length===4?args[0].slice(1):args[0];n.permissions=(n.type==='directory'?'d':'-')+'rwxrwxrwx'.split('').map((c,i)=>(parseInt(d[Math.floor(i/3)])&(4>>(i%3)))?c:'-').join('')}return''};
+C.which=(args,s)=>{if(!args.length)return'which: missing argument';return args.map((cmd)=>{const found=findExecutable(cmd,s);return found&& !found.permissionDenied ? found.path : `${cmd} not found`;}).join('\n')};
+C.chmod=(args,s)=>{if(args.length<2)return'chmod: missing operand';const n=VFS.getN(args[1],s.cwd);const perms=getPermissionHelper();if(!n)return`chmod: '${args[1]}': No such file or directory`;if(perms&&!perms.canWrite(n,getRuntimeUser(s),s))return`chmod: '${args[1]}': Permission denied`;if(/^\d{3,4}$/.test(args[0])){const d=args[0].length===4?args[0].slice(1):args[0];n.permissions=(n.type==='directory'?'d':'-')+d.split('').map((digit)=>{const numeric=parseInt(digit,10);return`${numeric&4?'r':'-'}${numeric&2?'w':'-'}${numeric&1?'x':'-'}`}).join('')}return''};
 C.chown=(args,s)=>{if(args.length<2)return'chown: missing operand';const n=VFS.getN(args[1],s.cwd);if(!n)return`chown: '${args[1]}': No such file or directory`;const p=args[0].split(':');n.owner=p[0]||n.owner;if(p[1])n.group=p[1];return''};
 C.chgrp=(args,s)=>{if(args.length<2)return'chgrp: missing operand';const n=VFS.getN(args[1],s.cwd);if(!n)return`chgrp: '${args[1]}': No such file or directory`;n.group=args[0];return''};
 C.ps=()=>{const P=PM.list();const h='USER       PID  %CPU  %MEM    VSZ   RSS STAT START COMMAND';return h+'\n'+P.map(p=>`${p.user.padEnd(8)} ${String(p.pid).padStart(5)}  ${p.cpu.padStart(4)}  ${p.mem.padStart(4)}  ${String(p.vsz).padStart(6)} ${String(p.rss).padStart(5)}  ${p.status.padEnd(3)}  ${p.start}  ${p.name}`).join('\n')};
@@ -729,10 +900,10 @@ C.df=(args)=>{const h=args.includes('-h');return'Filesystem      Size  Used Avai
 C.du=(args,s)=>{const h=args.includes('-h'),sm=args.includes('-s'),t=args.find(a=>!a.startsWith('-'))||'.';const n=VFS.getN(t,s.cwd);if(!n)return`du: '${t}': No such file`;function sz(nd){if(nd.type==='file')return nd.size||0;let tot=4096;if(nd.children)for(const c of Object.values(nd.children))tot+=sz(c);return tot}if(sm){const size=sz(n);return h?`${(size/1024).toFixed(0)}K\t${t}`:`${size}\t${t}`}const r=[];function walk(nd,p){if(nd.type==='directory'){let size=4096;if(nd.children)for(const[k,v]of Object.entries(nd.children)){walk(v,p+'/'+k);size+=sz(v)}r.push(h?`${(size/1024).toFixed(0)}K\t${p}`:`${size}\t${p}`)}}walk(n,t);return r.join('\n')};
 C.free=(args)=>args.includes('-h')?'              total        used        free      shared  buff/cache   available\nMem:          7.7Gi       2.1Gi       3.8Gi       256Mi       1.8Gi       5.1Gi\nSwap:         2.0Gi          0B       2.0Gi':'              total        used        free      shared  buff/cache   available\nMem:        8052736     2202624     3985408      262144     1864704     5373952\nSwap:       2097152           0     2097152';
 C.uname=(args)=>{if(args.includes('-a'))return'Linux weblinux 6.5.0-generic #1 SMP x86_64 GNU/Linux';if(args.includes('-r'))return'6.5.0-generic';return'Linux'};
-C.whoami=(args,s)=>s&&s.isRoot?'root':US.cur();
-C.who=(args,s)=>{const d=new Date();const user=s&&s.isRoot?'root':'pass';return`${user}     pts/0        ${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} (web-terminal)`};
+C.whoami=(args,s)=>getRuntimeUser(s);
+C.who=(args,s)=>{const d=new Date();const user=getRuntimeUser(s);return`${user}     pts/0        ${d.toISOString().slice(0,10)} ${d.toTimeString().slice(0,5)} (web-terminal)`};
 C.hostname=()=>'weblinux';
-C.id=(args,s)=>s&&s.isRoot?'uid=0(root) gid=0(root) groups=0(root),27(sudo)':'uid=1000(pass) gid=1000(pass) groups=1000(pass),27(sudo)';
+C.id=(args,s)=>s&&s.isRoot?'uid=0(root) gid=0(root)':'uid=1000(pass) gid=1000(pass)';
 C.sort=(args,s,stdin)=>{let rev=false,num=false,uniq=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r'))rev=true;if(a.includes('n'))num=true;if(a.includes('u'))uniq=true}else files.push(a)}let text='';if(files.length){for(const f of files){const c=VFS.read(f,s.cwd);if(c===null)return`sort: ${f}: No such file`;text+=(text?'\n':'')+c}}else if(stdin!=null)text=stdin;else return'';let l=text.split('\n');if(num)l.sort((a,b)=>parseFloat(a)-parseFloat(b));else l.sort();if(rev)l.reverse();if(uniq)l=[...new Set(l)];return l.join('\n')};
 C.uniq=(args,s,stdin)=>{let cm=false,dm=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('c'))cm=true;if(a.includes('d'))dm=true}else files.push(a)}let text='';if(files.length){const c=VFS.read(files[0],s.cwd);if(c===null)return`uniq: ${files[0]}: No such file`;text=c}else if(stdin!=null)text=stdin;else return'';const lines=text.split('\n');const r=[];let prev=null,count=0;for(const line of lines){if(line===prev)count++;else{if(prev!==null&&(!dm||count>1))r.push(cm?`${String(count).padStart(7)} ${prev}`:prev);prev=line;count=1}}if(prev!==null&&(!dm||count>1))r.push(cm?`${String(count).padStart(7)} ${prev}`:prev);return r.join('\n')};
 C.wc=(args,s,stdin)=>{let lf=false,wf=false,cf=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('l'))lf=true;if(a.includes('w'))wf=true;if(a.includes('c'))cf=true}else files.push(a)}const all=!lf&&!wf&&!cf;function cnt(t,nm){const l=t.split('\n').length;const w=t.split(/\s+/).filter(Boolean).length;const ch=t.length;const p=[];if(all||lf)p.push(String(l).padStart(6));if(all||wf)p.push(String(w).padStart(6));if(all||cf)p.push(String(ch).padStart(6));if(nm)p.push(' '+nm);return p.join('')}if(!files.length){if(stdin==null)return'wc: missing operand';return cnt(stdin,'')}const r=[];for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){r.push(`wc: ${f}: No such file`);continue}r.push(cnt(c,f))}return r.join('\n')};
@@ -746,7 +917,7 @@ C.history=(a,s)=>s.history.map((h,i)=>`  ${String(i+1).padStart(4)}  ${h}`).join
 C.clear=()=>'\x1b[CLEAR]';
 C.date=()=>new Date().toString();
 C.cal=()=>{const now=new Date(),y=now.getFullYear(),m=now.getMonth();const mo=['January','February','March','April','May','June','July','August','September','October','November','December'];let cal=`    ${mo[m]} ${y}\nSu Mo Tu We Th Fr Sa\n`;const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();let line='   '.repeat(fd);for(let d=1;d<=dim;d++){const ds=d===now.getDate()?`\x1b[7m${String(d).padStart(2)}\x1b[0m`:String(d).padStart(2);line+=ds;if((fd+d)%7===0){cal+=line+'\n';line=''}else line+=' '}if(line.trim())cal+=line;return cal};
-C.echo=(args,s)=>{let start=0;let addNewline=true;if(args[0]==='-n'){start=1;addNewline=false}const currentUser=s&&s.isRoot?'root':US.cur();const currentHome=s&&s.isRoot?'/root':'/home/pass';let text=args.slice(start).join(' ');text=text.replace(/\$HOME/g,currentHome).replace(/\$USER/g,currentUser).replace(/\$PWD/g,s.cwd).replace(/\$SHELL/g,'/bin/bash').replace(/\$HOSTNAME/g,'weblinux').replace(/\$PATH/g,'/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin');return addNewline?`${text}\n`:text};
+C.echo=(args,s)=>{let start=0;let addNewline=true;if(args[0]==='-n'){start=1;addNewline=false}const text=args.slice(start).join(' ');return addNewline?`${text}\n`:text};
 // Debug helpers for tokenizer/parser behavior inspection.
 C['debug-tokens']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-tokens: missing input\n',exitCode:2};try{return{stdout:`${JSON.stringify(window.ShellTokenizer.tokenize(source),null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'tokenizer error'}\n`,exitCode:2}}};
 C['debug-ast']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-ast: missing input\n',exitCode:2};try{const tokens=window.ShellTokenizer.tokenize(source);const chunks=window.ShellParser.splitBySemicolon(tokens).filter(chunk=>chunk.length);const ast=chunks.length===1?window.ShellParser.parse(chunks[0]):chunks.map(chunk=>window.ShellParser.parse(chunk));return{stdout:`${JSON.stringify(ast,null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'parser error'}\n`,exitCode:2}}};
@@ -766,8 +937,9 @@ C.man=(args)=>{
   const page=manPage(target,section);
   return page||`No manual entry for ${target}${section?` in section ${section}`:''}`;
 };
-C.env=(a,s)=>`HOME=${s&&s.isRoot?'/root':'/home/pass'}\nUSER=${s&&s.isRoot?'root':US.cur()}\nSHELL=/bin/bash\nPWD=${s.cwd}\nPATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\nHOSTNAME=weblinux\nTERM=xterm-256color\nLANG=en_US.UTF-8`;
-C.export=()=>'';C.alias=()=>'';
+C.env=(a,s)=>Object.entries(getRuntimeEnv(s)).map(([key,value])=>`${key}=${value}`).join('\n');
+C.export=(args,s)=>{const env=getRuntimeEnv(s);if(!args.length)return Object.entries(env).map(([key,value])=>`${key}=${value}`).join('\n');const out=[];for(let i=0;i<args.length;i++){let token=args[i];const idx=token.indexOf('=');if(idx<=0){out.push(`export: '${token}': not a valid assignment`);continue;}const key=token.slice(0,idx);if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)){out.push(`export: '${token}': not a valid identifier`);continue;}let value=token.slice(idx+1);while(i+1<args.length&&!args[i+1].includes('=')){value+=`${value ? ' ' : ''}${args[i+1]}`;i++;}if((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'"))){value=value.slice(1,-1);}env[key]=value;}return out.join('\n')};C.alias=()=>'';
+C.unset=(args,s)=>{if(!args.length)return'';const env=getRuntimeEnv(s);for(const name of args){if(/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) delete env[name];}return''};
 C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
 C.sudo=(args,s,stdin)=>{if(!args.length)return'usage: sudo command';if(C[args[0]])return C[args[0]](args.slice(1),s,stdin);return`sudo: ${args[0]}: command not found`};
 C.help=()=>{const sec={'FILE SYSTEM':['pwd','ls','cd','mkdir','rmdir','rm','cp','mv','touch'],'FILE VIEWING':['cat','head','tail','less'],'SEARCH':['grep','find','locate','which'],'TEXT':['sort','uniq','wc','cut','awk','sed'],'EDITORS':['nano'],'PERMISSIONS':['chmod','chown','chgrp'],'PROCESS':['ps','top','kill'],'COMPRESSION':['tar','zip','gzip','gunzip'],'NETWORK':['ping','ifconfig','netstat','ssh','scp'],'PACKAGES':['apt'],'SYSTEM':['df','du','free','uname','whoami','who','hostname','id'],'USER MGMT':['useradd','userdel','passwd'],'MISC':['echo','date','cal','history','clear','man','env','help']};let o='\x1b[1;37mAvailable Commands\x1b[0m\n';for(const[s,cmds]of Object.entries(sec))o+=`\n\x1b[1;33m${s}\x1b[0m\n  \x1b[36m${cmds.join('\x1b[0m, \x1b[36m')}\x1b[0m\n`;o+='\n\x1b[90mSupports: pipes (|), redirects (> >> <), Tab completion, history\x1b[0m';return o};
@@ -814,6 +986,78 @@ function normalizeCommandResult(rawResult) {
 function createCommandRuntime(commands) {
   const registry = {};
 
+  function appendLines(base, extra) {
+    if (!extra) return base;
+    if (!base) return extra;
+    return `${base}\n${extra}`;
+  }
+
+  async function executeScriptFile(name, context) {
+    if (!name || !name.includes('/')) return null;
+    const runtimeState = context && context.terminalState ? context.terminalState : null;
+    const cwd = runtimeState && runtimeState.cwd ? runtimeState.cwd : '/';
+    const scriptPath = VFS.resolvePath(name, cwd);
+    const node = VFS.getN(scriptPath, cwd);
+    if (!node) return null;
+    if (node.type !== 'file' && node.type !== 'executable') return null;
+    if (!hasExecutePermission(node, runtimeState)) {
+      return {
+        stdout: '',
+        stderr: `Permission denied: ${name}`,
+        exitCode: 126,
+        control: '',
+      };
+    }
+
+    const content = VFS.read(scriptPath, cwd);
+    if (content === null) return null;
+    if (!context || !context.shell || typeof context.shell.run !== 'function') {
+      return {
+        stdout: '',
+        stderr: `bash: ${name}: cannot execute script`,
+        exitCode: 1,
+        control: '',
+      };
+    }
+
+    const lines = String(content).split(/\r?\n/);
+    let merged = { stdout: '', stderr: '', exitCode: 0, control: '' };
+
+    for (let index = 0; index < lines.length; index++) {
+      const rawLine = lines[index];
+      const line = String(rawLine || '').trim();
+      if (!line) continue;
+      if (index === 0 && line.startsWith('#!')) continue;
+      if (line.startsWith('#')) continue;
+
+      const lineResult = await context.shell.run(line, context);
+      merged.stdout = appendLines(merged.stdout, lineResult.stdout || '');
+      merged.stderr = appendLines(merged.stderr, lineResult.stderr || '');
+      merged.exitCode = Number.isInteger(lineResult.exitCode) ? lineResult.exitCode : merged.exitCode;
+      if (lineResult.control) merged.control = lineResult.control;
+    }
+
+    return merged;
+  }
+
+  function resolveCommandTarget(name, context) {
+    if (SHELL_BUILTINS.has(name) && registry[name]) {
+      return { status: 'builtin', name };
+    }
+
+    const executable = findExecutable(name, context && context.terminalState ? context.terminalState : context);
+    if (executable && executable.permissionDenied) {
+      return { status: 'denied', executable };
+    }
+    if (executable && registry[executable.command]) {
+      return { status: 'command', name: executable.command, executable };
+    }
+    if (registry[name]) {
+      return { status: 'command', name };
+    }
+    return { status: 'missing', executable };
+  }
+
   for (const [name, handler] of Object.entries(commands || {})) {
     registry[name] = {
       name,
@@ -840,12 +1084,29 @@ function createCommandRuntime(commands) {
       return Object.keys(registry);
     },
 
+    findExecutable(commandName, context) {
+      return findExecutable(commandName, context && context.terminalState ? context.terminalState : context);
+    },
+
     async execute(name, args, context) {
-      const command = registry[name];
-      if (!command) {
+      const resolved = resolveCommandTarget(name, context);
+      if (resolved.status === 'denied') {
         return {
           stdout: '',
-          stderr: `bash: ${name}: command not found`,
+          stderr: `Permission denied: ${name}`,
+          exitCode: 126,
+          control: '',
+        };
+      }
+
+      const command = (resolved.status === 'builtin' || resolved.status === 'command') ? registry[resolved.name] : null;
+      if (!command) {
+        const scriptPath = resolved.executable && resolved.executable.path ? resolved.executable.path : name;
+        const scriptResult = await executeScriptFile(scriptPath, context);
+        if (scriptResult) return scriptResult;
+        return {
+          stdout: '',
+          stderr: `command not found: ${name}`,
           exitCode: 127,
           control: '',
         };
@@ -884,6 +1145,16 @@ function initFS(){
     saved: '',
     user: window.weblinuxSessionUser || 'pass',
     isRoot: false,
+    env: {
+      PATH: '/bin:/usr/bin:/usr/local/bin',
+      HOME: '/home/pass',
+      USER: window.weblinuxSessionUser || 'pass',
+      SHELL: '/bin/bash',
+      PWD: '/home/pass',
+      HOSTNAME: 'weblinux',
+      TERM: 'xterm-256color',
+      LANG: 'en_US.UTF-8',
+    },
     sudo: {
       active: false,
       command: '',
@@ -919,12 +1190,9 @@ function initFS(){
     try {
       const runtimeContext = {
         cwd: terminalState.cwd,
-        env: {
-          HOME: terminalState.isRoot ? '/root' : '/home/pass',
-          USER: terminalState.isRoot ? 'root' : (terminalState.user || 'pass'),
-          PWD: terminalState.cwd,
-          SHELL: '/bin/bash',
-        },
+        user: getRuntimeUser(terminalState),
+        env: getRuntimeEnv(terminalState),
+        expandInput: (input) => expandShellVariables(input, terminalState),
         vfs: VFS,
         shell: shellRuntime,
         stdin: '',
@@ -994,18 +1262,28 @@ function initFS(){
     terminalState.input = '';
     terminalState.cursor = 0;
     terminalState.saved = '';
+    if (window.__weblinuxInputManager && typeof window.__weblinuxInputManager.clearInputValue === 'function') {
+      window.__weblinuxInputManager.clearInputValue();
+    }
     renderInput();
     scrollToBottom();
     if (inputManager) inputManager.focus();
+  }
+
+  function resetSudoEntry() {
+    terminalState.input = '';
+    terminalState.cursor = 0;
+    terminalState.saved = '';
+    if (window.__weblinuxInputManager && typeof window.__weblinuxInputManager.clearInputValue === 'function') {
+      window.__weblinuxInputManager.clearInputValue();
+    }
   }
 
   function cancelSudoPrompt(message) {
     terminalState.sudo.active = false;
     terminalState.sudo.command = '';
     terminalState.sudo.attempts = 0;
-    terminalState.input = '';
-    terminalState.cursor = 0;
-    terminalState.saved = '';
+    resetSudoEntry();
     if (message) writeLine(message);
     renderInput();
     scrollToBottom();
@@ -1015,9 +1293,7 @@ function initFS(){
     terminalState.sudo.active = false;
     terminalState.sudo.command = '';
     terminalState.sudo.attempts = 0;
-    terminalState.input = '';
-    terminalState.cursor = 0;
-    terminalState.saved = '';
+    resetSudoEntry();
   }
 
   // Re-fit when output changes so long lines stay visible without clipping.
@@ -1109,7 +1385,11 @@ function initFS(){
       terminalState.input = '';
       terminalState.cursor = 0;
 
-      if (WebLinuxAuth.verifyPassword(password)) {
+      const sessionPassword = window.weblinuxSession && typeof window.weblinuxSession.password === 'string'
+        ? window.weblinuxSession.password
+        : WebLinuxAuth.getPassword();
+
+      if (password === sessionPassword) {
         terminalState.sudo.cacheUntil = Date.now() + 60000;
         finishSudoPrompt();
 
@@ -1134,8 +1414,7 @@ function initFS(){
         writeLine('sudo: 3 incorrect password attempts');
       } else {
         writeLine('Sorry, try again.');
-        terminalState.input = '';
-        terminalState.cursor = 0;
+        resetSudoEntry();
         renderInput();
         scrollToBottom();
         return;
