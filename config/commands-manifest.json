@@ -38,6 +38,66 @@
       "examples": ["pwd"],
       "seealso": ["cd(1)", "sh(1)"]
     },
+    "type": {
+      "name": "type",
+      "section": "1",
+      "category": "SHELL",
+      "summary": "display how a command would be interpreted",
+      "synopsis": "type NAME...",
+      "description": "Tell whether a name is a shell builtin, executable, or missing from PATH.",
+      "examples": ["type cd", "type ls", "type fakecmd"],
+      "seealso": ["which(1)", "help(1)"]
+    },
+    "stat": {
+      "name": "stat",
+      "section": "1",
+      "category": "FILE_SYSTEM",
+      "summary": "display file status",
+      "synopsis": "stat FILE...",
+      "description": "Show file metadata including type, size, permissions, ownership, and timestamps.",
+      "examples": ["stat file.txt", "stat /etc/passwd"],
+      "seealso": ["ls(1)", "tree(1)"]
+    },
+    "tree": {
+      "name": "tree",
+      "section": "1",
+      "category": "FILE_SYSTEM",
+      "summary": "list contents of directories in a tree-like format",
+      "synopsis": "tree [PATH]",
+      "description": "Render a recursive directory structure with lightweight depth protection.",
+      "examples": ["tree", "tree /home", "tree ~/projects"],
+      "seealso": ["ls(1)", "find(1)"]
+    },
+    "basename": {
+      "name": "basename",
+      "section": "1",
+      "category": "FILE_SYSTEM",
+      "summary": "strip directory and suffix from filenames",
+      "synopsis": "basename NAME",
+      "description": "Print the final path component from a pathname.",
+      "examples": ["basename /home/pass/file.txt"],
+      "seealso": ["dirname(1)", "realpath(1)"]
+    },
+    "dirname": {
+      "name": "dirname",
+      "section": "1",
+      "category": "FILE_SYSTEM",
+      "summary": "strip last component from path names",
+      "synopsis": "dirname NAME",
+      "description": "Print the parent directory portion of a pathname.",
+      "examples": ["dirname /home/pass/file.txt"],
+      "seealso": ["basename(1)", "realpath(1)"]
+    },
+    "realpath": {
+      "name": "realpath",
+      "section": "1",
+      "category": "FILE_SYSTEM",
+      "summary": "print the resolved absolute file name",
+      "synopsis": "realpath FILE...",
+      "description": "Convert a relative pathname to its normalized absolute form.",
+      "examples": ["realpath ./file.txt", "realpath ~/projects/../notes"],
+      "seealso": ["basename(1)", "dirname(1)"]
+    },
     "mkdir": {
       "name": "mkdir",
       "section": "1",
@@ -48,7 +108,7 @@
       "options": ["-p  no error if existing, make parent directories as needed"],
       "examples": ["mkdir projects", "mkdir -p ~/work/app"],
       "seealso": ["rmdir(1)", "cd(1)"]
-      },
+    },
     "nano": {
       "name": "nano",
       "section": "1",
