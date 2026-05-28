@@ -9,9 +9,9 @@
   }
 
   const { TOKEN_TYPES } = tokenizer;
-  const { CommandNode, PipeNode, RedirectNode, AndNode } = shellAst;
+  const { CommandNode, PipeNode, RedirectNode, AndNode, OrNode } = shellAst;
 
-  if (!CommandNode || !PipeNode || !RedirectNode || !AndNode) {
+  if (!CommandNode || !PipeNode || !RedirectNode || !AndNode || !OrNode) {
     throw new Error("Shell AST node classes must be loaded before ShellParser");
   }
 
@@ -85,7 +85,7 @@
   // Parser precedence (high -> low):
   // 1) simple command + redirects
   // 2) pipe |
-  // 3) logical and &&
+  // 3) logical AND && and OR || (left-associative)
   function parse(tokens) {
     const stream = new TokenStream(tokens || []);
 
@@ -93,25 +93,33 @@
       throw new Error("shell: empty command");
     }
 
-    const ast = parseAnd(stream);
+    const ast = parseLogical(stream);
 
     if (!stream.eof()) {
       const next = stream.peek();
-      if (next && next.type === TOKEN_TYPES.OR) {
-        throw new Error("unsupported operator ||");
-      }
       throw syntaxErrorUnexpected(next);
     }
 
     return ast;
   }
 
-  function parseAnd(stream) {
+  function parseLogical(stream) {
     let node = parsePipe(stream);
 
-    while (stream.match(TOKEN_TYPES.AND)) {
-      const right = parsePipe(stream);
-      node = new AndNode(node, right);
+    while (true) {
+      if (stream.match(TOKEN_TYPES.AND)) {
+        const right = parsePipe(stream);
+        node = new AndNode(node, right);
+        continue;
+      }
+
+      if (stream.match(TOKEN_TYPES.OR)) {
+        const right = parsePipe(stream);
+        node = new OrNode(node, right);
+        continue;
+      }
+
+      break;
     }
 
     return node;
