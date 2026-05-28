@@ -806,9 +806,234 @@ function manApropos(term){
   return hits.length?hits.join('\n'):'apropos: nothing appropriate';
 }
 
+function getManifestHelpCatalog() {
+  if (!CommandManager || typeof CommandManager.getCatalog !== 'function') return [];
+  const catalog = CommandManager.getCatalog();
+  if (!Array.isArray(catalog) || !catalog.length) return [];
+
+  return catalog.map((group) => ({
+    category: group.category,
+    commands: (group.commands || []).map((entry) => ({
+      name: entry.name,
+      summary: entry.summary || '',
+    })),
+  }));
+}
+
+function getFallbackHelpCatalog() {
+  const sections = {
+    'FILE SYSTEM': ['pwd', 'ls', 'cd', 'mkdir', 'rmdir', 'rm', 'cp', 'mv', 'touch', 'stat', 'tree', 'basename', 'dirname', 'realpath'],
+    'FILE VIEWING': ['cat', 'head', 'tail', 'less'],
+    SEARCH: ['grep', 'find', 'locate', 'which'],
+    TEXT: ['sort', 'uniq', 'wc', 'cut', 'awk', 'sed'],
+    EDITORS: ['nano'],
+    PERMISSIONS: ['chmod', 'chown', 'chgrp'],
+    PROCESS: ['ps', 'top', 'kill'],
+    COMPRESSION: ['tar', 'zip', 'gzip', 'gunzip'],
+    NETWORK: ['ping', 'ifconfig', 'netstat', 'ssh', 'scp'],
+    PACKAGES: ['apt'],
+    SYSTEM: ['df', 'du', 'free', 'uname', 'whoami', 'who', 'hostname', 'id'],
+    'USER MGMT': ['useradd', 'userdel', 'passwd'],
+    SHELL: ['type', 'echo', 'date', 'cal', 'history', 'clear', 'man', 'env', 'export', 'alias', 'unset', 'exit', 'sudo', 'help'],
+  };
+
+  return Object.entries(sections).map(([category, commandNames]) => ({
+    category,
+    commands: commandNames.map((name) => {
+      const entry = Man[name] || null;
+      return {
+        name,
+        summary: entry && entry.summary ? entry.summary : '',
+      };
+    }),
+  }));
+}
+
+function getHelpCatalog() {
+  const catalog = getManifestHelpCatalog();
+  return catalog.length ? catalog : getFallbackHelpCatalog();
+}
+
+function renderHelpCatalog(catalog) {
+  const lines = ['\x1b[1;37mAvailable Commands\x1b[0m'];
+
+  for (const group of catalog) {
+    const category = String(group.category || 'UTILITIES').replace(/_/g, ' ');
+    lines.push('');
+    lines.push(`\x1b[1;33m${category}\x1b[0m`);
+
+    const commandLines = (group.commands || [])
+      .slice()
+      .sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')))
+      .map((entry) => {
+        const summary = entry && entry.summary ? ` - ${entry.summary}` : '';
+        return `  \x1b[36m${entry.name}\x1b[0m${summary}`;
+      });
+
+    lines.push(commandLines.join('\n'));
+  }
+
+  lines.push('');
+  lines.push('\x1b[90mSupports: pipes (|), redirects (> >> <), Tab completion, history\x1b[0m');
+  return lines.join('\n');
+}
+
+function formatStatTimestamp(value) {
+  if (!value) return 'unknown';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+}
+
+function getPathName(pathValue, cwd) {
+  if (!pathValue) return '';
+  return VFS.basename ? VFS.basename(pathValue, cwd || '/') : String(pathValue).split('/').filter(Boolean).pop() || '/';
+}
+
+function getNormalizedPath(pathValue, cwd) {
+  if (!VFS || typeof VFS.absStr !== 'function') return String(pathValue || '');
+  return VFS.absStr(pathValue, cwd || '/');
+}
+
+function getCommandRegistry() {
+  return window.__weblinuxCommandRegistry || null;
+}
+
+// Command resolution is centralized so type, which, autocomplete, and dispatch
+// all classify names from the same runtime registry flow.
+function resolveCommandTarget(commandName, state) {
+  if (!commandName) return { status: 'missing', name: '' };
+
+  const normalizedName = String(commandName);
+  if (SHELL_BUILTINS.has(normalizedName)) {
+    return { status: 'builtin', name: normalizedName };
+  }
+
+  const executable = findExecutable(normalizedName, state);
+  if (executable && executable.permissionDenied) {
+    return { status: 'denied', name: normalizedName, executable };
+  }
+  if (executable) {
+    return { status: 'executable', name: executable.command || normalizedName, executable };
+  }
+
+  const runtimeCommands = getCommandRegistry();
+  if (runtimeCommands && runtimeCommands[normalizedName]) {
+    return { status: 'command', name: normalizedName };
+  }
+
+  if (CommandManager && typeof CommandManager.getCommand === 'function' && CommandManager.getCommand(normalizedName)) {
+    return { status: 'command', name: normalizedName, manifest: true };
+  }
+
+  return { status: 'missing', name: normalizedName, executable: null };
+}
+
+function describeCommandTarget(commandName, state) {
+  if (!commandName) return 'type: missing command name';
+  const resolved = resolveCommandTarget(commandName, state);
+
+  if (resolved.status === 'builtin') return `${resolved.name} is a shell builtin`;
+  if (resolved.status === 'executable' && resolved.executable && resolved.executable.path) return `${resolved.name} is ${resolved.executable.path}`;
+  if (resolved.status === 'command') return `${resolved.name} is a shell command`;
+  return `${resolved.name} not found`;
+}
+
+function buildTreeLines(node, depthLimit, prefix, depth, seen, lines) {
+  if (!node || node.type !== 'directory' || !node.children) return;
+  if (depth >= depthLimit) {
+    lines.push(`${prefix}└── ...`);
+    return;
+  }
+
+  const children = Object.values(node.children).slice().sort((left, right) => left.name.localeCompare(right.name));
+  children.forEach((childNode, index) => {
+    const isLast = index === children.length - 1;
+    const branch = isLast ? '└── ' : '├── ';
+    lines.push(`${prefix}${branch}${childNode.name}`);
+
+    if (childNode.type === 'directory') {
+      const nextPrefix = `${prefix}${isLast ? '    ' : '│   '}`;
+      const nodeKey = childNode.path || `${prefix}/${childNode.name}`;
+      if (seen.has(nodeKey)) {
+        lines.push(`${nextPrefix}└── ...`);
+        return;
+      }
+      seen.add(nodeKey);
+      buildTreeLines(childNode, depthLimit, nextPrefix, depth + 1, seen, lines);
+    }
+  });
+}
+
+function formatTree(pathValue, cwd) {
+  const normalizedPath = getNormalizedPath(pathValue || '.', cwd);
+  const node = VFS.getN(normalizedPath, '/');
+  if (!node) return `tree: ${pathValue}: No such file or directory`;
+
+  const lines = [];
+  const label = !pathValue || pathValue === '.' ? '.' : normalizedPath;
+  lines.push(label);
+
+  if (node.type !== 'directory') return lines.join('\n');
+
+  buildTreeLines(node, 25, '', 0, new Set([node.path || normalizedPath]), lines);
+  return lines.join('\n');
+}
+
+function formatStatOutput(pathValue, cwd) {
+  const normalizedPath = getNormalizedPath(pathValue, cwd);
+  const node = VFS.getN(normalizedPath, '/');
+  if (!node) return `stat: cannot stat '${pathValue}': No such file or directory`;
+
+  if (normalizedPath === '/etc/passwd') {
+    console.log('stat debug node', node);
+  }
+
+  const kindMap = {
+    directory: 'directory',
+    executable: 'executable file',
+    virtual: 'virtual file',
+    file: 'regular file',
+  };
+
+  const createdAt = node.createdAt || node.modifiedAt || Date.now();
+  const modifiedAt = node.modifiedAt || createdAt;
+  const permissions = displayPermissions(node);
+  const size = typeof node.size === 'number' ? node.size : 0;
+  const owner = node.owner !== undefined && node.owner !== null ? node.owner : 'unknown';
+  const group = node.group !== undefined && node.group !== null ? node.group : 'unknown';
+
+  return [
+    `  File: ${normalizedPath}`,
+    `  Path: ${normalizedPath}`,
+    `  Type: ${kindMap[node.type] || node.type || 'file'}`,
+    `  Size: ${size}`,
+    `  Permissions: ${permissions}`,
+    `  Owner: ${owner}`,
+    `  Group: ${group}`,
+    `  Created: ${formatStatTimestamp(createdAt)}`,
+    `  Modified: ${formatStatTimestamp(modifiedAt)}`,
+    `  Changed: ${formatStatTimestamp(modifiedAt)}`,
+  ].join('\n');
+}
+
+function formatRealPath(pathValue, cwd) {
+  const normalizedPath = getNormalizedPath(pathValue, cwd);
+  const node = VFS.getN(normalizedPath, '/');
+  if (!node) return `realpath: ${pathValue}: No such file or directory`;
+  return normalizedPath;
+}
+
 /* ====== COMMANDS ====== */
 const C={};
-const SHELL_BUILTINS = new Set(['cd', 'export', 'exit', 'pwd', 'history', 'alias', 'unset']);
+const SHELL_BUILTINS = new Set(['cd', 'export', 'exit', 'pwd', 'history', 'alias', 'unset', 'type']);
 function fmtL(e){const pm=displayPermissions(e);const lk=e.type==='directory'?'2':'1';const ow=(e.owner||'pass').padEnd(6);const gr=(e.group||'pass').padEnd(6);const sz=String(e.size||0).padStart(6);const d=new Date(e.modifiedAt||Date.now());const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];const ds=`${mo[d.getMonth()]} ${String(d.getDate()).padStart(2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;const cl=e.type==='directory'?'\x1b[1;34m':'';const rs=e.type==='directory'?'\x1b[0m':'';return`${pm} ${lk} ${ow} ${gr} ${sz} ${ds} ${cl}${e.name}${rs}`}
 function resolveFsPath(pathValue, cwd){return VFS.resolvePath(pathValue, cwd);}
 function resolveFsNode(pathValue, cwd){return VFS.getN(resolveFsPath(pathValue, cwd), '/');}
@@ -879,7 +1104,8 @@ C.nano=(args,s)=>{const target=args.find(a=>!a.startsWith('-'));if(!target)retur
 C.grep=(args,s,stdin)=>{let ic=false,ln=false,rec=false,inv=false,cnt=false;const pos=[];for(const a of args){if(a.startsWith('-')&&!a.startsWith('--')){if(a.includes('i'))ic=true;if(a.includes('n'))ln=true;if(a.includes('r'))rec=true;if(a.includes('v'))inv=true;if(a.includes('c'))cnt=true}else pos.push(a)}if(!pos.length)return{stdout:'',stderr:'grep: missing pattern\n',exitCode:2};const pat=pos[0];const files=pos.slice(1);let re;try{re=new RegExp(pat,ic?'i':'')}catch(e){return{stdout:'',stderr:`grep: Invalid regex: '${pat}'\n`,exitCode:2}}function gC(ct,fn,mf){const ls=String(ct).split('\n');const r=[];let count=0;for(let i=0;i<ls.length;i++){const rawLine=ls[i];const m=re.test(rawLine);if(m!==inv){count++;if(!cnt){let l=rawLine,px='';if(mf&&fn)px+=`\x1b[35m${fn}\x1b[0m:`;if(ln)px+=`\x1b[32m${i+1}\x1b[0m:`;if(!inv)l=l.replace(re,mv=>`\x1b[1;31m${mv}\x1b[0m`);r.push(px+l)}}}if(cnt)r.push((mf&&fn?fn+':':'')+count);return{lines:r,count}}if(!files.length){if(stdin==null)return{stdout:'',stderr:'grep: no input\n',exitCode:2};const hit=gC(stdin,null,false);return{stdout:hit.lines.length?`${hit.lines.join('\n')}\n`:'',stderr:'',exitCode:hit.count>0?0:1}}if(rec){const r=[];let total=0;for(const f of files){const found=VFS.findN(f,s.cwd,n=>n.type==='file');for(const path of found){const c=VFS.read(path,s.cwd);if(c!==null){const hit=gC(c,path,true);r.push(...hit.lines);total+=hit.count}}}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:'',exitCode:total>0?0:1}}const r=[];const errs=[];let total=0;const mf=files.length>1;for(const f of files){const c=VFS.read(f,s.cwd);if(c===null){errs.push(`grep: ${f}: No such file or directory`);continue}const hit=gC(c,f,mf);r.push(...hit.lines);total+=hit.count}return{stdout:r.length?`${r.join('\n')}\n`:'',stderr:errs.length?`${errs.join('\n')}\n`:'',exitCode:errs.length?2:(total>0?0:1)}};
 C.find=(args,s)=>{let sp='.',np=null,tf=null;for(let i=0;i<args.length;i++){if(args[i]==='-name'&&args[i+1])np=args[++i];else if(args[i]==='-type'&&args[i+1])tf=args[++i];else if(!args[i].startsWith('-'))sp=args[i]}return VFS.findN(sp,s.cwd,(n)=>{if(np){const re=new RegExp('^'+np.replace(/\*/g,'.*').replace(/\?/g,'.')+'$');if(!re.test(n.name))return false}if(tf){if(tf==='f'&&n.type!=='file')return false;if(tf==='d'&&n.type!=='directory')return false}return true}).join('\n')};
 C.locate=(args,s)=>{if(!args.length)return'locate: no pattern';const re=new RegExp(args[0],'i');const r=VFS.findN('/',s.cwd,n=>re.test(n.name));return r.length?r.join('\n'):`locate: no results for '${args[0]}'`};
-C.which=(args,s)=>{if(!args.length)return'which: missing argument';return args.map((cmd)=>{const found=findExecutable(cmd,s);return found&& !found.permissionDenied ? found.path : `${cmd} not found`;}).join('\n')};
+C.which=(args,s)=>{if(!args.length)return'which: missing argument';return args.map((cmd)=>{const resolved=resolveCommandTarget(cmd,s);return resolved.status==='executable'&&resolved.executable&&resolved.executable.path&&!resolved.executable.permissionDenied?resolved.executable.path:`${cmd} not found`;}).join('\n')};
+C.type=(args,s)=>{if(!args.length)return'type: missing operand';return args.map((commandName)=>describeCommandTarget(commandName,s)).join('\n')};
 C.chmod=(args,s)=>{if(args.length<2)return'chmod: missing operand';const n=VFS.getN(args[1],s.cwd);const perms=getPermissionHelper();if(!n)return`chmod: '${args[1]}': No such file or directory`;if(perms&&!perms.canWrite(n,getRuntimeUser(s),s))return`chmod: '${args[1]}': Permission denied`;if(/^\d{3,4}$/.test(args[0])){const d=args[0].length===4?args[0].slice(1):args[0];n.permissions=(n.type==='directory'?'d':'-')+d.split('').map((digit)=>{const numeric=parseInt(digit,10);return`${numeric&4?'r':'-'}${numeric&2?'w':'-'}${numeric&1?'x':'-'}`}).join('')}return''};
 C.chown=(args,s)=>{if(args.length<2)return'chown: missing operand';const n=VFS.getN(args[1],s.cwd);if(!n)return`chown: '${args[1]}': No such file or directory`;const p=args[0].split(':');n.owner=p[0]||n.owner;if(p[1])n.group=p[1];return''};
 C.chgrp=(args,s)=>{if(args.length<2)return'chgrp: missing operand';const n=VFS.getN(args[1],s.cwd);if(!n)return`chgrp: '${args[1]}': No such file or directory`;n.group=args[0];return''};
@@ -918,6 +1144,11 @@ C.clear=()=>'\x1b[CLEAR]';
 C.date=()=>new Date().toString();
 C.cal=()=>{const now=new Date(),y=now.getFullYear(),m=now.getMonth();const mo=['January','February','March','April','May','June','July','August','September','October','November','December'];let cal=`    ${mo[m]} ${y}\nSu Mo Tu We Th Fr Sa\n`;const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();let line='   '.repeat(fd);for(let d=1;d<=dim;d++){const ds=d===now.getDate()?`\x1b[7m${String(d).padStart(2)}\x1b[0m`:String(d).padStart(2);line+=ds;if((fd+d)%7===0){cal+=line+'\n';line=''}else line+=' '}if(line.trim())cal+=line;return cal};
 C.echo=(args,s)=>{let start=0;let addNewline=true;if(args[0]==='-n'){start=1;addNewline=false}const text=args.slice(start).join(' ');return addNewline?`${text}\n`:text};
+C.basename=(args,s)=>{if(!args.length)return'basename: missing operand';return args.map((pathValue)=>VFS.basename(pathValue,s.cwd)).join('\n')};
+C.dirname=(args,s)=>{if(!args.length)return'dirname: missing operand';return args.map((pathValue)=>VFS.dirname(pathValue,s.cwd)).join('\n')};
+C.realpath=(args,s)=>{if(!args.length)return'realpath: missing operand';return args.map((pathValue)=>formatRealPath(pathValue,s.cwd)).join('\n')};
+C.stat=(args,s)=>{if(!args.length)return"stat: missing operand";return args.map((pathValue)=>formatStatOutput(pathValue,s.cwd)).join('\n\n')};
+C.tree=(args,s)=>{const target=args.find((arg)=>!arg.startsWith('-'))||'.';return formatTree(target,s.cwd)};
 // Debug helpers for tokenizer/parser behavior inspection.
 C['debug-tokens']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-tokens: missing input\n',exitCode:2};try{return{stdout:`${JSON.stringify(window.ShellTokenizer.tokenize(source),null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'tokenizer error'}\n`,exitCode:2}}};
 C['debug-ast']=(args)=>{const source=args.join(' ');if(!source)return{stdout:'',stderr:'debug-ast: missing input\n',exitCode:2};try{const tokens=window.ShellTokenizer.tokenize(source);const chunks=window.ShellParser.splitBySemicolon(tokens).filter(chunk=>chunk.length);const ast=chunks.length===1?window.ShellParser.parse(chunks[0]):chunks.map(chunk=>window.ShellParser.parse(chunk));return{stdout:`${JSON.stringify(ast,null,2)}\n`,stderr:'',exitCode:0}}catch(error){return{stdout:'',stderr:`${error&&error.message?error.message:'parser error'}\n`,exitCode:2}}};
@@ -942,7 +1173,7 @@ C.export=(args,s)=>{const env=getRuntimeEnv(s);if(!args.length)return Object.ent
 C.unset=(args,s)=>{if(!args.length)return'';const env=getRuntimeEnv(s);for(const name of args){if(/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) delete env[name];}return''};
 C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
 C.sudo=(args,s,stdin)=>{if(!args.length)return'usage: sudo command';if(C[args[0]])return C[args[0]](args.slice(1),s,stdin);return`sudo: ${args[0]}: command not found`};
-C.help=()=>{const sec={'FILE SYSTEM':['pwd','ls','cd','mkdir','rmdir','rm','cp','mv','touch'],'FILE VIEWING':['cat','head','tail','less'],'SEARCH':['grep','find','locate','which'],'TEXT':['sort','uniq','wc','cut','awk','sed'],'EDITORS':['nano'],'PERMISSIONS':['chmod','chown','chgrp'],'PROCESS':['ps','top','kill'],'COMPRESSION':['tar','zip','gzip','gunzip'],'NETWORK':['ping','ifconfig','netstat','ssh','scp'],'PACKAGES':['apt'],'SYSTEM':['df','du','free','uname','whoami','who','hostname','id'],'USER MGMT':['useradd','userdel','passwd'],'MISC':['echo','date','cal','history','clear','man','env','help']};let o='\x1b[1;37mAvailable Commands\x1b[0m\n';for(const[s,cmds]of Object.entries(sec))o+=`\n\x1b[1;33m${s}\x1b[0m\n  \x1b[36m${cmds.join('\x1b[0m, \x1b[36m')}\x1b[0m\n`;o+='\n\x1b[90mSupports: pipes (|), redirects (> >> <), Tab completion, history\x1b[0m';return o};
+C.help=()=>renderHelpCatalog(getHelpCatalog());
 
 /* ====== SHELL COMMAND RUNTIME ====== */
 function normalizeCommandResult(rawResult) {
@@ -985,6 +1216,7 @@ function normalizeCommandResult(rawResult) {
 
 function createCommandRuntime(commands) {
   const registry = {};
+  window.__weblinuxCommandRegistry = registry;
 
   function appendLines(base, extra) {
     if (!extra) return base;
@@ -1040,22 +1272,23 @@ function createCommandRuntime(commands) {
     return merged;
   }
 
-  function resolveCommandTarget(name, context) {
-    if (SHELL_BUILTINS.has(name) && registry[name]) {
-      return { status: 'builtin', name };
+  function resolveDispatchTarget(name, context) {
+    const terminalState = context && context.terminalState ? context.terminalState : context;
+    const resolved = resolveCommandTarget(name, terminalState);
+
+    if (resolved.status === 'executable' && registry[resolved.name]) {
+      return { status: 'command', name: resolved.name, executable: resolved.executable };
     }
 
-    const executable = findExecutable(name, context && context.terminalState ? context.terminalState : context);
-    if (executable && executable.permissionDenied) {
-      return { status: 'denied', executable };
+    if (resolved.status === 'command' && registry[resolved.name]) {
+      return resolved;
     }
-    if (executable && registry[executable.command]) {
-      return { status: 'command', name: executable.command, executable };
+
+    if (resolved.status === 'command' && !registry[resolved.name]) {
+      return { status: 'missing', executable: resolved.executable || null, name: resolved.name };
     }
-    if (registry[name]) {
-      return { status: 'command', name };
-    }
-    return { status: 'missing', executable };
+
+    return resolved;
   }
 
   for (const [name, handler] of Object.entries(commands || {})) {
@@ -1081,7 +1314,11 @@ function createCommandRuntime(commands) {
 
   return {
     listCommandNames() {
-      return Object.keys(registry);
+      const names = new Set(Object.keys(registry));
+      if (CommandManager && typeof CommandManager.getAllNames === 'function') {
+        for (const name of CommandManager.getAllNames()) names.add(name);
+      }
+      return Array.from(names).sort();
     },
 
     findExecutable(commandName, context) {
@@ -1089,7 +1326,7 @@ function createCommandRuntime(commands) {
     },
 
     async execute(name, args, context) {
-      const resolved = resolveCommandTarget(name, context);
+      const resolved = resolveDispatchTarget(name, context);
       if (resolved.status === 'denied') {
         return {
           stdout: '',
