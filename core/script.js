@@ -1031,9 +1031,99 @@ function formatRealPath(pathValue, cwd) {
   return normalizedPath;
 }
 
+function decodeShellEscapes(text) {
+  const source = String(text || '');
+  let result = '';
+
+  for (let index = 0; index < source.length; index++) {
+    const char = source[index];
+    if (char !== '\\') {
+      result += char;
+      continue;
+    }
+
+    const next = source[index + 1];
+    if (next === undefined) {
+      result += '\\';
+      continue;
+    }
+
+    if (next === 'n') {
+      result += '\n';
+      index++;
+      continue;
+    }
+
+    if (next === 't') {
+      result += '\t';
+      index++;
+      continue;
+    }
+
+    if (next === '\\') {
+      result += '\\';
+      index++;
+      continue;
+    }
+
+    result += next;
+    index++;
+  }
+
+  return result;
+}
+
+function formatShellPrintf(formatString, values) {
+  const format = String(formatString || '');
+  const args = Array.isArray(values) ? values : [];
+  let output = '';
+  let argIndex = 0;
+
+  for (let index = 0; index < format.length; index++) {
+    const char = format[index];
+
+    if (char === '%') {
+      const next = format[index + 1];
+      if (next === '%') {
+        output += '%';
+        index++;
+        continue;
+      }
+
+      if (next === 's') {
+        output += String(args[argIndex++] ?? '');
+        index++;
+        continue;
+      }
+
+      if (next === 'b') {
+        output += decodeShellEscapes(String(args[argIndex++] ?? ''));
+        index++;
+        continue;
+      }
+
+      output += '%';
+      continue;
+    }
+
+    if (char === '\\') {
+      const next = format[index + 1];
+      if (next === 'n' || next === 't' || next === '\\') {
+        output += decodeShellEscapes(`\\${next}`);
+        index++;
+        continue;
+      }
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
 /* ====== COMMANDS ====== */
 const C={};
-const SHELL_BUILTINS = new Set(['cd', 'export', 'exit', 'pwd', 'history', 'alias', 'unset', 'type']);
+const SHELL_BUILTINS = new Set(['cd', 'export', 'exit', 'pwd', 'history', 'alias', 'unalias', 'unset', 'type']);
 function fmtL(e){const pm=displayPermissions(e);const lk=e.type==='directory'?'2':'1';const ow=(e.owner||'pass').padEnd(6);const gr=(e.group||'pass').padEnd(6);const sz=String(e.size||0).padStart(6);const d=new Date(e.modifiedAt||Date.now());const mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];const ds=`${mo[d.getMonth()]} ${String(d.getDate()).padStart(2)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;const cl=e.type==='directory'?'\x1b[1;34m':'';const rs=e.type==='directory'?'\x1b[0m':'';return`${pm} ${lk} ${ow} ${gr} ${sz} ${ds} ${cl}${e.name}${rs}`}
 function resolveFsPath(pathValue, cwd){return VFS.resolvePath(pathValue, cwd);}
 function resolveFsNode(pathValue, cwd){return VFS.getN(resolveFsPath(pathValue, cwd), '/');}
@@ -1089,7 +1179,29 @@ function hasExecutePermission(node, state) {
 
 C.pwd=(a,s)=>resolveFsPath(s.cwd, '/');
 C.ls=(args,s)=>{let sa=false,lo=false;const paths=[];for(const a of args){if(a.startsWith('-')){if(a.includes('a'))sa=true;if(a.includes('l'))lo=true}else paths.push(a)}if(!paths.length)paths.push('.');const perms=getPermissionHelper();const res=[];for(const p of paths){const target=resolveFsPath(p,s.cwd);const nd=resolveFsNode(target,'/');if(!nd)return`ls: cannot access '${p}': No such file or directory`;if(perms&&!perms.canRead(nd,getRuntimeUser(s),s))return`ls: cannot access '${p}': Permission denied`;if(nd.type==='file'){res.push(lo?fmtL(nd):nd.name);continue}let ent=Object.values(nd.children);if(sa)ent=[{name:'.',type:'directory',permissions:nd.permissions,owner:nd.owner,group:nd.group,size:4096,modifiedAt:nd.modifiedAt},{name:'..',type:'directory',permissions:'drwxr-xr-x',owner:'root',group:'root',size:4096,modifiedAt:nd.modifiedAt},...ent];else ent=ent.filter(e=>!e.name.startsWith('.'));if(paths.length>1)res.push(p+':');if(lo){res.push('total '+ent.length*4);for(const e of ent)res.push(fmtL(e))}else res.push(ent.map(e=>e.type==='directory'?`\x1b[1;34m${e.name}\x1b[0m`:e.name).join('  '))}return res.join('\n')};
-C.cd=(args,s)=>{const t=args[0]||'~';const abs=resolveFsPath(t,s.cwd);const nd=resolveFsNode(abs,'/');const perms=getPermissionHelper();if(!nd)return{stdout:'',stderr:`bash: cd: ${t}: No such file or directory\n`,exitCode:1};if(nd.type!=='directory')return{stdout:'',stderr:`bash: cd: ${t}: Not a directory\n`,exitCode:1};if(perms&&!perms.canExecute(nd,getRuntimeUser(s),s))return{stdout:'',stderr:`bash: cd: ${t}: Permission denied\n`,exitCode:1};s.cwd=abs||'/';return{stdout:'',stderr:'',exitCode:0}};
+// cd supports 'cd -' to switch to previous directory (stored in terminal state)
+C.cd=(args,s)=>{
+  const t = args[0] || '~';
+  if (!s) return { stdout: '', stderr: `bash: cd: ${t}: No such file or directory\n`, exitCode: 1 };
+  let target = t;
+  if (t === '-') {
+    if (!s.previousCwd) return { stdout: '', stderr: `bash: cd: -: OLDPWD not set\n`, exitCode: 1 };
+    target = s.previousCwd;
+  }
+
+  const abs = resolveFsPath(target, s.cwd);
+  const nd = resolveFsNode(abs, '/');
+  const perms = getPermissionHelper();
+  if (!nd) return { stdout: '', stderr: `bash: cd: ${t}: No such file or directory\n`, exitCode: 1 };
+  if (nd.type !== 'directory') return { stdout: '', stderr: `bash: cd: ${t}: Not a directory\n`, exitCode: 1 };
+  if (perms && !perms.canExecute(nd, getRuntimeUser(s), s)) return { stdout: '', stderr: `bash: cd: ${t}: Permission denied\n`, exitCode: 1 };
+
+  // update previousCwd only on successful change
+  const old = s.cwd || '/';
+  s.cwd = abs || '/';
+  s.previousCwd = old;
+  return { stdout: '', stderr: '', exitCode: 0 };
+};
 C.mkdir=(args,s)=>{if(!args.length)return'mkdir: missing operand';let mp=false;const dirs=[];for(const a of args){if(a==='-p')mp=true;else dirs.push(a)}const perms=getPermissionHelper();const r=[];for(const d of dirs){const target=resolveFsPath(d,s.cwd);const parent=resolveFsNode(VFS.dirname(target,'/'),'/');if(perms&&parent&&!perms.canWrite(parent,getRuntimeUser(s),s)){r.push(`mkdir: cannot create directory '${d}': Permission denied`);continue}if(mp){VFS.ensureDirectoryPath(target,'/')}else{const e=VFS.mkdir(target,'/');if(e)r.push(e)}}return r.join('\n')};
 C.rmdir=(args,s)=>{if(!args.length)return'rmdir: missing operand';const r=[];const perms=getPermissionHelper();for(const a of args){const target=resolveFsPath(a,s.cwd);const n=resolveFsNode(target,'/');const parentPath=VFS.dirname(target,'/');const parent=resolveFsNode(parentPath,'/');if(!n){r.push(`rmdir: '${a}': No such file or directory`);continue}if(n.type!=='directory'){r.push(`rmdir: '${a}': Not a directory`);continue}if(perms&&parent&&!perms.canWrite(parent,getRuntimeUser(s),s)){r.push(`rmdir: '${a}': Permission denied`);continue}if(Object.keys(n.children).length>0){r.push(`rmdir: '${a}': Directory not empty`);continue}const unlinkRef=VFS.getPN(target,'/');if(!unlinkRef.parent||unlinkRef.parent.type!=='directory'||!unlinkRef.parent.children[unlinkRef.name]){r.push(`rmdir: '${a}': No such file or directory`);continue}delete unlinkRef.parent.children[unlinkRef.name];}return r.join('\n')};
 C.rm=(args,s)=>{let rec=false,force=false;const files=[];for(const a of args){if(a.startsWith('-')){if(a.includes('r')||a.includes('R'))rec=true;if(a.includes('f'))force=true}else files.push(a)}if(!files.length)return force?'':'rm: missing operand';const perms=getPermissionHelper();const r=[];for(const f of files){const target=resolveFsPath(f,s.cwd);const node=resolveFsNode(target,'/');const parent=resolveFsNode(VFS.dirname(target,'/'),'/');if(perms&&node&&!perms.canWrite(node,getRuntimeUser(s),s)&&(!parent||!perms.canWrite(parent,getRuntimeUser(s),s))){r.push(`rm: cannot remove '${f}': Permission denied`);continue}const e=VFS.rm(target,'/',rec);if(e&&!force)r.push(e)}return r.join('\n')};
@@ -1143,7 +1255,29 @@ C.history=(a,s)=>s.history.map((h,i)=>`  ${String(i+1).padStart(4)}  ${h}`).join
 C.clear=()=>'\x1b[CLEAR]';
 C.date=()=>new Date().toString();
 C.cal=()=>{const now=new Date(),y=now.getFullYear(),m=now.getMonth();const mo=['January','February','March','April','May','June','July','August','September','October','November','December'];let cal=`    ${mo[m]} ${y}\nSu Mo Tu We Th Fr Sa\n`;const fd=new Date(y,m,1).getDay(),dim=new Date(y,m+1,0).getDate();let line='   '.repeat(fd);for(let d=1;d<=dim;d++){const ds=d===now.getDate()?`\x1b[7m${String(d).padStart(2)}\x1b[0m`:String(d).padStart(2);line+=ds;if((fd+d)%7===0){cal+=line+'\n';line=''}else line+=' '}if(line.trim())cal+=line;return cal};
-C.echo=(args,s)=>{let start=0;let addNewline=true;if(args[0]==='-n'){start=1;addNewline=false}const text=args.slice(start).join(' ');return addNewline?`${text}\n`:text};
+// echo supports -n (no newline) and -e (interpret escapes) flags
+C.echo=(args,s)=>{
+  let addNewline = true;
+  let interpretEscapes = false;
+  let i = 0;
+  while (i < args.length && args[i].startsWith('-') && args[i].length > 1) {
+    const flag = args[i].slice(1);
+    if (/^[ne]+$/.test(flag)) {
+      if (flag.includes('n')) addNewline = false;
+      if (flag.includes('e')) interpretEscapes = true;
+      i++;
+      continue;
+    }
+    break;
+  }
+
+  let text = args.slice(i).join(' ');
+  if (interpretEscapes && text) {
+    text = decodeShellEscapes(text);
+  }
+
+  return addNewline ? `${text}\n` : text;
+};
 C.basename=(args,s)=>{if(!args.length)return'basename: missing operand';return args.map((pathValue)=>VFS.basename(pathValue,s.cwd)).join('\n')};
 C.dirname=(args,s)=>{if(!args.length)return'dirname: missing operand';return args.map((pathValue)=>VFS.dirname(pathValue,s.cwd)).join('\n')};
 C.realpath=(args,s)=>{if(!args.length)return'realpath: missing operand';return args.map((pathValue)=>formatRealPath(pathValue,s.cwd)).join('\n')};
@@ -1169,7 +1303,67 @@ C.man=(args)=>{
   return page||`No manual entry for ${target}${section?` in section ${section}`:''}`;
 };
 C.env=(a,s)=>Object.entries(getRuntimeEnv(s)).map(([key,value])=>`${key}=${value}`).join('\n');
-C.export=(args,s)=>{const env=getRuntimeEnv(s);if(!args.length)return Object.entries(env).map(([key,value])=>`${key}=${value}`).join('\n');const out=[];for(let i=0;i<args.length;i++){let token=args[i];const idx=token.indexOf('=');if(idx<=0){out.push(`export: '${token}': not a valid assignment`);continue;}const key=token.slice(0,idx);if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)){out.push(`export: '${token}': not a valid identifier`);continue;}let value=token.slice(idx+1);while(i+1<args.length&&!args[i+1].includes('=')){value+=`${value ? ' ' : ''}${args[i+1]}`;i++;}if((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'"))){value=value.slice(1,-1);}env[key]=value;}return out.join('\n')};C.alias=()=>'';
+C.export=(args,s)=>{const env=getRuntimeEnv(s);if(!args.length)return Object.entries(env).map(([key,value])=>`${key}=${value}`).join('\n');const out=[];for(let i=0;i<args.length;i++){let token=args[i];const idx=token.indexOf('=');if(idx<=0){out.push(`export: '${token}': not a valid assignment`);continue;}const key=token.slice(0,idx);if(!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)){out.push(`export: '${token}': not a valid identifier`);continue;}let value=token.slice(idx+1);while(i+1<args.length&&!args[i+1].includes('=')){value+=`${value ? ' ' : ''}${args[i+1]}`;i++;}if((value.startsWith('"')&&value.endsWith('"'))||(value.startsWith("'")&&value.endsWith("'"))){value=value.slice(1,-1);}env[key]=value;}return out.join('\n')};
+
+// printf: lightweight shell-style formatting supporting %s and %% and simple escapes in the format string
+C.printf=(args,s)=>{
+  if(!args.length) return '';
+  return formatShellPrintf(args[0] || '', args.slice(1));
+};
+
+// tee: write stdin to file and also return it on stdout. Supports -a to append.
+C.tee=(args,s,stdin)=>{
+  const append = args.includes('-a');
+  const target = args.filter(a=>!a.startsWith('-'))[0];
+  if(!target) return stdin || '';
+  const vfs = VFS;
+  const user = getRuntimeUser(s);
+  try{
+    const abs = vfs.resolvePath(target, s.cwd);
+    if(append){
+      const ok = vfs.append(abs, '/', stdin || '');
+      if(!ok) return `tee: cannot write to ${target}`;
+    } else {
+      const ok = vfs.write(abs, '/', stdin || '');
+      if(!ok) return `tee: cannot write to ${target}`;
+    }
+  }catch(e){
+    return `tee: ${e&&e.message?e.message:'write failed'}`;
+  }
+  return stdin || '';
+};
+
+// Alias builtin: set or display aliases stored in terminalState.aliases
+C.alias=(args,s)=>{
+  if(!s) return '';
+  s.aliases = s.aliases || {};
+  if(!args.length){
+    return Object.entries(s.aliases).map(([k,v])=>`${k}='${v}'`).join('\n');
+  }
+
+  const out=[];
+  for(let index=0; index<args.length; index++){
+    const token = args[index];
+    if(token.includes('=')){
+      const idx = token.indexOf('=');
+      const name = token.slice(0, idx);
+      const valueParts = [token.slice(idx + 1)];
+      while(index + 1 < args.length && !args[index + 1].includes('=')) {
+        valueParts.push(args[++index]);
+      }
+
+      const value = valueParts.join(' ').trim();
+      s.aliases[name] = value;
+      continue;
+    }
+
+    if(s.aliases[token]) out.push(`${token}='${s.aliases[token]}'`);
+  }
+  return out.join('\n');
+};
+
+// Unalias builtin: remove aliases
+C.unalias=(args,s)=>{if(!s) return '';s.aliases=s.aliases||{};if(!args.length)return 'unalias: usage: unalias name';for(const name of args){delete s.aliases[name]}return ''};
 C.unset=(args,s)=>{if(!args.length)return'';const env=getRuntimeEnv(s);for(const name of args){if(/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) delete env[name];}return''};
 C.exit=()=>'\x1b[33mCannot exit: running in browser.\x1b[0m';
 C.sudo=(args,s,stdin)=>{if(!args.length)return'usage: sudo command';if(C[args[0]])return C[args[0]](args.slice(1),s,stdin);return`sudo: ${args[0]}: command not found`};
@@ -1257,12 +1451,13 @@ function createCommandRuntime(commands) {
 
     for (let index = 0; index < lines.length; index++) {
       const rawLine = lines[index];
-      const line = String(rawLine || '').trim();
-      if (!line) continue;
-      if (index === 0 && line.startsWith('#!')) continue;
-      if (line.startsWith('#')) continue;
+      // Preserve actual line content for scripts while skipping blank lines
+      if (rawLine == null) continue;
+      if (String(rawLine).trim() === '') continue;
+      if (index === 0 && String(rawLine).startsWith('#!')) continue;
+      if (String(rawLine).trim().startsWith('#')) continue;
 
-      const lineResult = await context.shell.run(line, context);
+      const lineResult = await context.shell.run(String(rawLine), context);
       merged.stdout = appendLines(merged.stdout, lineResult.stdout || '');
       merged.stderr = appendLines(merged.stderr, lineResult.stderr || '');
       merged.exitCode = Number.isInteger(lineResult.exitCode) ? lineResult.exitCode : merged.exitCode;
@@ -1375,6 +1570,8 @@ function initFS(){
   let terminalMode = 'normal';
   const terminalState = {
     cwd: '/home/pass',
+    previousCwd: '/home/pass',
+    aliases: {},
     history: [],
     historyIdx: -1,
     input: '',
