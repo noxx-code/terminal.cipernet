@@ -45,7 +45,7 @@
             index += 1;
             continue;
           }
-          value += next;
+          value += `\\${next}`;
           index += 2;
           continue;
         }
