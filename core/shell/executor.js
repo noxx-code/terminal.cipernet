@@ -48,6 +48,10 @@
         return this.executeAnd(node, context);
       }
 
+        if (node.type === "Or") {
+          return this.executeOr(node, context);
+        }
+
       return normalizeResult({ stderr: `shell: unsupported AST node '${node.type}'`, exitCode: 2 });
     }
 
@@ -154,6 +158,22 @@
     async executeAnd(node, context) {
       const leftResult = await this.execute(node.left, context);
       if (leftResult.exitCode !== 0) {
+        return leftResult;
+      }
+
+      const rightResult = await this.execute(node.right, context);
+      return normalizeResult({
+        stdout: rightResult.stdout,
+        stderr: appendText(leftResult.stderr, rightResult.stderr),
+        exitCode: rightResult.exitCode,
+        control: rightResult.control,
+      });
+    }
+
+    async executeOr(node, context) {
+      const leftResult = await this.execute(node.left, context);
+      // If left succeeded, return left's result and do NOT execute right.
+      if (leftResult.exitCode === 0) {
         return leftResult;
       }
 
