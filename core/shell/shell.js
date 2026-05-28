@@ -23,10 +23,27 @@
 
     async run(input, context) {
       const rawSource = String(input || "");
+      // Expand shell variables first
       const expandedSource = context && typeof context.expandInput === 'function'
         ? String(context.expandInput(rawSource) || "")
         : rawSource;
-      const source = expandedSource.trim();
+
+      // Alias expansion: perform simple, pre-tokenization alias substitution for the first word.
+      let aliasExpanded = expandedSource;
+      try {
+        const aliases = context && context.terminalState && context.terminalState.aliases ? context.terminalState.aliases : null;
+        if (aliases) {
+          const parts = String(expandedSource).trim().split(/\s+/);
+          const first = parts[0];
+          if (first && typeof aliases[first] === 'string') {
+            aliasExpanded = aliases[first] + (parts.length > 1 ? ' ' + parts.slice(1).join(' ') : '');
+          }
+        }
+      } catch (e) {
+        // Fail silently on alias expansion errors to avoid breaking the shell
+      }
+
+      const source = String(aliasExpanded || '').trim();
       if (!source) {
         return { stdout: "", stderr: "", exitCode: 0, control: "" };
       }
