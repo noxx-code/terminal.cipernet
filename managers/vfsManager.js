@@ -51,7 +51,9 @@ const VFSManager = (() => {
         if (permissions) options.permissions = permissions;
         if (owner) options.owner = owner;
         if (group) options.group = group;
-        VFS._mkfile(path, content, options);
+        // _mkfile delegates to ensureFilePath(path, content, cwd, options),
+        // so pass cwd explicitly to avoid dropping manifest ownership metadata.
+        VFS._mkfile(path, content, '/', options);
       }
     }
 
